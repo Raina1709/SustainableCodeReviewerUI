@@ -126,7 +126,7 @@ st.success(f"Model loaded successfully.")
 # --- User Input ---
 st.header("Input")
 input_path_or_url = st.text_input(
-    "Enter local path to Python script/directory OR public GitHub repository URL:",
+    "Enter a public GitHub repository URL:",
     placeholder="e.g., C:\\path\\to\\script.py or https://github.com/user/repo/tree/branch/subdir"
 )
 
