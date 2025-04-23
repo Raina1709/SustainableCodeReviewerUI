@@ -127,7 +127,7 @@ st.success(f"Model loaded successfully.")
 st.header("Input")
 input_path_or_url = st.text_input(
     "Enter a public GitHub repository URL:",
-    placeholder="e.g., C:\\path\\to\\script.py or https://github.com/user/repo/tree/branch/subdir"
+    placeholder="https://github.com/user/repo/tree/branch/subdir"
 )
 
 analyze_button = st.button("Analyze and Predict")
