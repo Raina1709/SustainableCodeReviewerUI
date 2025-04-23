@@ -121,7 +121,7 @@ def load_model(filename):
         st.stop()
 
 loaded_model = load_model(MODEL_FILENAME)
-st.success(f"Model '{MODEL_FILENAME}' loaded successfully.")
+st.success(f"Model loaded successfully.")
 
 # --- User Input ---
 st.header("Input")
