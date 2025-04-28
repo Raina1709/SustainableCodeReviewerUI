@@ -2,5 +2,7 @@ streamlit
 pandas
 scikit-learn
 joblib
-requests
 numpy
+astunparse
+requests
+openai
