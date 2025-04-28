@@ -134,10 +134,10 @@ def get_openai_recommendations(source_code, features_dict):
              st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
              return "Credentials configuration missing."
 
-        api_key = st.secrets["AZURE_OPENAI_API_KEY"]
-        azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
-        api_version = st.secrets["AZURE_OPENAI_API_VERSION"]
-        deployment_name = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
+        api_key = st.secrets["Open AI"]["AZURE_OPENAI_API_KEY"]
+        azure_endpoint = st.secrets["Open AI"]["AZURE_OPENAI_ENDPOINT"]
+        api_version = st.secrets["Open AI"]["AZURE_OPENAI_API_VERSION"]
+        deployment_name = st.secrets["Open AI"]["AZURE_OPENAI_DEPLOYMENT_NAME"]
 
         # Check if values are actually set (secrets might exist but be empty)
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
