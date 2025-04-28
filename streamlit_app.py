@@ -1,3 +1,6 @@
+# streamlit_app.py (v5 - Added Azure OpenAI Recommendations)
+# UI for Python Script Energy Consumption Prediction + Recommendations
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -9,12 +12,16 @@ import zipfile
 import io
 import tempfile
 import shutil
-import re # Import regex for URL parsing
+import re
+from openai import AzureOpenAI # Import Azure OpenAI client
 
+# --- Configuration ---
 MODEL_FILENAME = 'random_forest_energy_model.joblib'
 FEATURES_ORDER = ['LOC', 'No_of_Functions', 'No_of_Classes', 'No_of_Loops',
                   'Loop_Nesting_Depth', 'No_of_Conditional_Blocks', 'Import_Score',
                   'I/O Calls']
+
+# --- Feature Extraction Code ---
 
 library_weights = {
     "torch": 10, "tensorflow": 10, "jax": 9, "keras": 9, "transformers": 9, "lightgbm": 8,
@@ -48,22 +55,31 @@ class FeatureExtractor(ast.NodeVisitor):
         if func_name in file_io_funcs: self.file_io_calls += 1
         self.generic_visit(node)
 
-def extract_features_from_file(file_path):
+
+# Modified to also return the source code string
+def extract_features_and_code_from_file(file_path):
+    """
+    Reads a Python file, extracts static code features and source code.
+    Returns (features_dict, source_code_string) or (None, None) on failure.
+    """
+    source_code = None
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            source_code = f.read()
+    except Exception as e:
+        print(f"Error reading script file {file_path}: {e}")
+        st.error(f"Could not read file: {os.path.basename(file_path)}")
+        return None, None # Return None for both
 
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f: source = f.read()
+        tree = ast.parse(source_code)
     except Exception as e:
-        print(f"Error reading script file {file_path}: {e}") # Log error
-        st.error(f"Could not read file: {os.path.basename(file_path)}") # Show error in UI
-        return None
-    try:
-        tree = ast.parse(source)
-    except Exception as e:
-         print(f"Error parsing script {file_path} with AST: {e}") # Log error
-         st.error(f"Could not parse file (invalid Python?): {os.path.basename(file_path)}") # Show error in UI
-         return None
+         print(f"Error parsing script {file_path} with AST: {e}")
+         st.error(f"Could not parse file (invalid Python?): {os.path.basename(file_path)}")
+         return None, source_code # Return code even if parsing fails, maybe useful
 
-    num_lines = len(source.splitlines())
+    # Calculate features...
+    num_lines = len(source_code.splitlines())
     num_functions = sum(isinstance(node, ast.FunctionDef) for node in ast.walk(tree))
     num_classes = sum(isinstance(node, ast.ClassDef) for node in ast.walk(tree))
     num_loops = sum(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
@@ -87,10 +103,10 @@ def extract_features_from_file(file_path):
         'No_of_Conditional_Blocks': num_conditional_blocks, 'Import_Score': weighted_import_score,
         'I/O Calls': extractor.file_io_calls
     }
-    return features_dict # Just return the dictionary
+    return features_dict, source_code # Return both
 
 def predict_for_features(model, features_dict):
-    
+    # (Same as before)
     try:
         input_features = {key: [pd.to_numeric(value, errors='coerce')] for key, value in features_dict.items()}
         input_df = pd.DataFrame(input_features, columns=FEATURES_ORDER)
@@ -103,11 +119,107 @@ def predict_for_features(model, features_dict):
         st.error(f"Error during prediction step: {e}")
         return None
 
+# --- Azure OpenAI Function ---
+# @st.cache_data # Optionally cache OpenAI responses for a short time
+def get_openai_recommendations(source_code, features_dict):
+    """Sends code and features to Azure OpenAI for recommendations."""
+    recommendations = "Could not retrieve recommendations." # Default message
+    try:
+        # --- IMPORTANT: Configure Credentials ---
+        # Uses Streamlit Secrets Management (secrets.toml) - Recommended for deployment
+        # Ensure you have created .streamlit/secrets.toml with your Azure keys
+        # Check if secrets are loaded
+        if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
+             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
+             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
+             return "Credentials configuration missing."
 
+        api_key = st.secrets["AZURE_OPENAI_API_KEY"]
+        azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
+        api_version = st.secrets["AZURE_OPENAI_API_VERSION"]
+        deployment_name = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
+
+        # Check if values are actually set (secrets might exist but be empty)
+        if not all([api_key, azure_endpoint, api_version, deployment_name]):
+            st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
+            return "Credentials configuration incomplete."
+
+
+        client = AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=azure_endpoint,
+            api_version=api_version
+        )
+
+        # --- Construct the Prompt ---
+        features_str = "\n".join([f"- {key.replace('_', ' ')}: {value}" for key, value in features_dict.items()])
+
+        prompt_messages = [
+            {"role": "system", "content": "You are an expert Python programmer specialized in code optimization for energy efficiency. Analyze the provided code and its static features to suggest specific, actionable changes that would likely reduce its energy consumption during execution."},
+            {"role": "user", "content": f"""Please analyze the following Python code for potential energy optimizations.
+
+        Consider factors like:
+        - Algorithmic efficiency (e.g., unnecessary computations, better data structures)
+        - Loop optimizations (e.g., reducing iterations, vectorization)
+        - I/O operations (e.g., batching, buffering, efficient file handling)
+        - Library usage (e.g., choosing lighter alternatives if possible, efficient use of heavy libraries)
+        - Concurrency/Parallelism (potential benefits or overhead)
+        - Memory usage patterns
+
+        Provide specific, actionable recommendations on how to modify the code to reduce energy consumption. Focus on practical changes and explain the reasoning. Structure recommendations clearly, perhaps using bullet points.
+
+        Code Features:
+        {features_str}
+
+        Source Code:
+        ```python
+        {source_code}
+        Recommendations:
+
+        Also give the percentage improvement in the Energy Efficiency after doing the recommended changes in the following format:
+        Recommendation | Percentage Improvement
+        Algorithmic Efficiency | 5-10%
+        Loop Optimizations | 1-3%
+        """}
+        ]
+
+        # --- Make API Call ---
+        st.write("_Contacting Azure OpenAI... (This may take a moment)_") # Give user feedback
+        response = client.chat.completions.create(
+            model=deployment_name, # Your deployment name
+            messages=prompt_messages,
+            temperature=0.5, # Lower temperature for more focused recommendations
+            max_tokens=4000, # Increased slightly for potentially longer recommendations
+            top_p=0.95,
+            frequency_penalty=0,
+            presence_penalty=0,
+            stop=None
+        )
+
+        # --- Extract Response ---
+        if response.choices:
+            recommendations = response.choices[0].message.content.strip()
+            if not recommendations: # Handle empty response case
+                recommendations = "AI model returned an empty recommendation."
+        else:
+            recommendations = "No recommendations received from API (response structure unexpected)."
+
+    except ImportError:
+        st.error("The 'openai' library is not installed. Please add it to requirements.txt and reinstall.")
+        recommendations = "OpenAI library not found."
+    except KeyError as e:
+        # This catches cases where a secret isn't defined in secrets.toml
+        st.error(f"Azure OpenAI credential '{e}' not found in Streamlit Secrets (secrets.toml).")
+        recommendations = f"Credential configuration missing: {e}"
+    except Exception as e:
+        st.error(f"Error calling Azure OpenAI API: {e}")
+        recommendations = f"Error fetching recommendations: {e}"
+
+    return recommendations
+#--- Streamlit UI ---
 st.set_page_config(layout="wide")
 st.title("🐍 Sustainable Code Reviewer (Prototype)")
 
-# --- Load Model ---
 @st.cache_resource # Cache the loaded model
 def load_model(filename):
     try:
@@ -120,31 +232,34 @@ def load_model(filename):
         st.error(f"FATAL ERROR: Could not load model '{filename}'. Error: {e}")
         st.stop()
 
+#--- Load Model ---
+#This function is defined above, using @st.cache_resource
 loaded_model = load_model(MODEL_FILENAME)
-st.success(f"Model loaded successfully.")
+st.success(f"Prediction Model loaded successfully.")
 
-# --- User Input ---
+#--- User Input ---
 st.header("Input")
 input_path_or_url = st.text_input(
-    "Enter a public GitHub repository URL:",
-    placeholder="https://github.com/user/repo/tree/branch/subdir"
+"Enter public GitHub repository URL:",
+placeholder="https://github.com/skills/introduction-to-github"
 )
 
 analyze_button = st.button("Analyze and Predict")
 
-st.header("Results")
+#--- Analysis and Prediction Output Area ---
 
-if analyze_button and input_path_or_url:
-    files_to_process = []
-    scan_source_description = ""
-    temp_dir_context = None
-    extracted_repo_root = None # Path inside temp_dir holding repo files
-    base_path_for_relative = None # Base path for relative display (local or extracted)
-    target_subdir_in_repo = None # Subdir specified in URL
+files_to_process = []
+scan_source_description = ""
+temp_dir_context = None
+extracted_repo_root = None
+base_path_for_relative = None
+target_subdir_in_repo = None
 
-    with st.spinner("Accessing source and finding Python files..."):
-        # Check if input is a GitHub URL
-        if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
+# --- Determine Input Type and Get Files ---
+
+if analyze_button:
+    # Check if input is a GitHub URL
+    if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
             scan_source_description = f"GitHub source: {input_path_or_url}"
             st.info(f"Processing {scan_source_description}")
 
@@ -214,16 +329,15 @@ if analyze_button and input_path_or_url:
             except Exception as e:
                 st.error(f"Error during zip extraction or file scanning: {e}")
                 if temp_dir_context: temp_dir_context.cleanup()
-                st.stop()
 
-        # Check if input is a local path
-        elif os.path.exists(input_path_or_url):
+    elif os.path.exists(input_path_or_url):
+        with st.spinner("Accessing source and finding Python files..."):
             base_path_for_relative = input_path_or_url # Store base path
             if os.path.isfile(input_path_or_url) and input_path_or_url.endswith(".py"):
                 scan_source_description = f"local file: {input_path_or_url}"
                 st.info(f"Processing {scan_source_description}")
                 files_to_process.append(input_path_or_url)
-                base_path_for_relative = os.path.dirname(input_path_or_url) # Base for relative path is dir
+                base_path_for_relative = os.path.dirname(input_path_or_url) # Use dir for relative path
             elif os.path.isdir(input_path_or_url):
                 scan_source_description = f"local directory: {input_path_or_url}"
                 st.info(f"Processing {scan_source_description}")
@@ -232,67 +346,66 @@ if analyze_button and input_path_or_url:
                     for file in files:
                         if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
             else:
-                st.error(f"Local path exists but is not a directory or a .py file: {input_path_or_url}")
-                st.stop()
-        else:
-            st.error(f"Input path or URL not found or not recognized: {input_path_or_url}")
-            st.stop()
+                st.error(f"Local path is not a directory or a .py file: {input_path_or_url}")
+    else:
+        st.error(f"Input path or URL not found or not recognized: {input_path_or_url}")
+            
         # --- End Determine Input Type ---
 
-    # --- Process Files ---
-    if not files_to_process:
-        st.warning("No Python files found to process in the specified location.")
-    else:
-        st.info(f"Found {len(files_to_process)} Python file(s). Analyzing...")
-        results_list = []
-        overall_success_count = 0
-        results_placeholder = st.container() # Use a container to group results
+# --- Process Files ---
+st.header("Results")
+results_placeholder = st.container() # Use a container to group results
+if not files_to_process:
+    st.warning("No Python files found to process.")
+else:
+    overall_success_count = 0
 
-        with results_placeholder:
-            # Don't use a spinner here, show results progressively
-            for file_path in files_to_process:
-                # Determine relative path for display
-                display_path = os.path.basename(file_path) # Default
-                try:
-                     if base_path_for_relative and os.path.commonpath([base_path_for_relative, file_path]) == os.path.normpath(base_path_for_relative):
-                          display_path = os.path.relpath(file_path, base_path_for_relative)
-                except ValueError: # Handles different drive letters etc.
-                     display_path = os.path.basename(file_path) # Fallback
+    with results_placeholder:
+        for file_path in files_to_process:
+            display_path = os.path.basename(file_path) # Default
+            try: # Try getting relative path
+                 if base_path_for_relative and os.path.commonpath([base_path_for_relative, file_path]) == os.path.normpath(base_path_for_relative):
+                      display_path = os.path.relpath(file_path, base_path_for_relative)
+            except ValueError: display_path = os.path.basename(file_path)
 
-                st.subheader(f"Results for: {display_path}") # Display filename first
+            st.subheader(f"Results for: {display_path}")
 
-                features_dict = extract_features_from_file(file_path) # Function now handles errors internally via st.error
+            # Extract features AND source code
+            features_dict, source_code = extract_features_and_code_from_file(file_path) # Handles its own errors via st.error
 
-                if features_dict:
-                    # Display features
-                    st.write("🔍 **Extracted Features:**")
-                    output_str = ""
-                    for key, value in features_dict.items():
-                        output_str += f"  • {key.replace('_', ' '):<25} : {value}\n"
-                    st.code(output_str, language=None)
+            if features_dict and source_code:
+                # Display features
+                st.write("🔍 **Extracted Features:**")
+                output_str = "\n".join([f"  • {key.replace('_', ' '):<25} : {value}" for key, value in features_dict.items()])
+                st.code(output_str, language=None)
 
-                    # Predict
-                    prediction = predict_for_features(loaded_model, features_dict)
+                # Predict Energy
+                prediction = predict_for_features(loaded_model, features_dict) # Handles its own errors via st.error
 
-                    if prediction is not None:
-                        st.success(f"**Predicted Energy: {prediction:.2f} joules**")
-                        results_list.append({'file': display_path, 'predicted_joules': prediction})
-                        overall_success_count += 1
-                    # Error message for prediction failure is handled inside predict_for_features
-                # Error message for feature extraction failure is handled inside extract_features_from_file
+                if prediction is not None:
+                    st.success(f"**Predicted Energy: {prediction:.2f} joules**")
+                    overall_success_count += 1
 
-                st.divider() # Add divider between files
+                    # Get OpenAI Recommendations
+                    st.write("💡 **Fetching Energy Saving Recommendations...**")
+                    # Using a spinner specific to the API call
+                    with st.spinner("Contacting Azure OpenAI..."):
+                         recommendations = get_openai_recommendations(source_code, features_dict)
+                    st.markdown("**Recommendations:**")
+                    st.markdown(recommendations) # Display recommendations using markdown
+                # No 'else' needed as predict_for_features shows st.error
 
-            st.info(f"Processing finished. Successfully predicted for {overall_success_count} out of {len(files_to_process)} Python file(s) processed.")
+            # No 'else' needed as extract_features_and_code_from_file shows st.error
 
-    # Cleanup temporary directory if it was created
-    if temp_dir_context:
-        try:
-            temp_dir_context.cleanup()
-            st.write("Temporary directory cleaned up.")
-        except Exception as e:
-            st.warning(f"Could not automatically clean up temp directory. Error: {e}")
+            st.divider() # Add divider between files
 
-elif analyze_button:
-    st.warning("Please enter a local path or a GitHub URL.")
+# Cleanup temporary directory
+if temp_dir_context:
+    try:
+        temp_dir_context.cleanup()
+        st.write("Temporary directory cleaned up.")
+    except Exception as e:
+        st.warning(f"Could not automatically clean up temp directory. Error: {e}")
+
+
 
