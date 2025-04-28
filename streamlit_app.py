@@ -177,7 +177,7 @@ def get_openai_recommendations(source_code, features_dict):
         Recommendations:
 
         Also give the percentage improvement in the Energy Efficiency after doing the recommended changes in the following format:
-        Recommendation | Percentage Improvement
+        Recommendation | Efficiency Improvement
         Algorithmic Efficiency | 5-10%
         Loop Optimizations | 1-3%
         """}
