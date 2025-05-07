@@ -428,4 +428,3 @@ with tab2:
     st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
     st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
     st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
-    st.info("The 'Estimated Total Potential Saving' is a rough calculation based on the percentage improvements suggested by the AI. Actual savings may vary after implementing the recommendations.")
