@@ -124,6 +124,7 @@ def predict_for_features(model, features_dict):
 def get_openai_recommendations(source_code, features_dict):
     """Sends code and features to Azure OpenAI for recommendations."""
     recommendations = "Could not retrieve recommendations." # Default message
+    potential_savings_percent = 0.0
     try:
         # --- IMPORTANT: Configure Credentials ---
         # Uses Streamlit Secrets Management (secrets.toml) - Recommended for deployment
@@ -132,7 +133,7 @@ def get_openai_recommendations(source_code, features_dict):
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
-            return "Credentials configuration missing."
+            return "Credentials configuration missing.", potential_savings_percent
 
         api_key = st.secrets["AZURE_OPENAI_API_KEY"]
         azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -142,7 +143,7 @@ def get_openai_recommendations(source_code, features_dict):
         # Check if values are actually set (secrets might exist but be empty)
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
             st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
-            return "Credentials configuration incomplete."
+            return "Credentials configuration incomplete.", potential_savings_percent
 
 
         client = AzureOpenAI(
