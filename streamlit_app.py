@@ -202,6 +202,18 @@ def get_openai_recommendations(source_code, features_dict):
             recommendations = response.choices[0].message.content.strip()
             if not recommendations: # Handle empty response case
                 recommendations = "AI model returned an empty recommendation."
+            else:
+                # Try to find percentage savings in the recommendations
+                savings_matches = re.findall(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
+                if savings_matches:
+                    # Take the higher end of the first found range as a rough estimate
+                    try:
+                        if savings_matches[0][1]:
+                            potential_savings_percent = float(savings_matches[0][1])
+                        else:
+                            potential_savings_percent = float(savings_matches[0][0])
+                    except ValueError:
+                        potential_savings_percent = 0.0
         else:
             recommendations = "No recommendations received from API (response structure unexpected)."
 
