@@ -269,72 +269,77 @@ with tab1:
 
     # --- Determine Input Type and Get Files ---
     if analyze_button:
-        # ... (rest of the code for handling GitHub URLs and local files/directories remains the same) ...
+    # Check if input is a GitHub URL
         if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
-            scan_source_description = f"GitHub source: {input_path_or_url}"
-            st.info(f"Processing {scan_source_description}")
+                scan_source_description = f"GitHub source: {input_path_or_url}"
+                st.info(f"Processing {scan_source_description}")
 
-            match = re.match(r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/(.*))?)?", input_path_or_url)
-            if not match:
-                st.error("Could not parse GitHub URL structure. Please provide URL to repo root or subdirectory.")
-                st.stop()
-            user, repo, branch, _, subdir = match.groups()
-            repo = repo.replace(".git", "")
-            target_subdir_in_repo = subdir.strip('/') if subdir else None
-            repo_url_base = f"[https://github.com/](https://github.com/){user}/{repo}"
-            st.write(f"Detected Repository Base: {repo_url_base}")
-            if target_subdir_in_repo: st.write(f"Detected Target Subdirectory: {target_subdir_in_repo}")
+                # --- Improved URL Parsing ---
+                match = re.match(r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/(.*))?)?", input_path_or_url)
+                if not match:
+                    st.error("Could not parse GitHub URL structure. Please provide URL to repo root or subdirectory.")
+                    st.stop()
+                user, repo, branch, _, subdir = match.groups()
+                repo = repo.replace(".git", "")
+                target_subdir_in_repo = subdir.strip('/') if subdir else None
+                repo_url_base = f"https://github.com/{user}/{repo}"
+                st.write(f"Detected Repository Base: {repo_url_base}")
+                if target_subdir_in_repo: st.write(f"Detected Target Subdirectory: {target_subdir_in_repo}")
+                # --- End Improved URL Parsing ---
 
-            potential_branches = [branch] if branch else ['main', 'master']
-            repo_zip_content = None
-            for b in potential_branches:
-                potential_zip_url = f"{repo_url_base}/archive/refs/heads/{b}.zip"
-                st.write(f"Attempting to download zip from branch: {b}...")
+                # Attempt download using common branches (use specified branch first if available)
+                potential_branches = [branch] if branch else ['main', 'master']
+                repo_zip_content = None
+                for b in potential_branches:
+                    potential_zip_url = f"{repo_url_base}/archive/refs/heads/{b}.zip"
+                    st.write(f"Attempting to download zip from branch: {b}...")
+                    try:
+                        response = requests.get(potential_zip_url, stream=True, timeout=30)
+                        response.raise_for_status()
+                        repo_zip_content = response.content
+                        st.write(f"Successfully downloaded zip for branch: {b}")
+                        break
+                    except requests.exceptions.RequestException as e:
+                        st.write(f"Could not download zip for branch '{b}': {e}")
+                    except Exception as e:
+                        st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
+
+                if not repo_zip_content:
+                    st.error("Could not download repository zip. Check URL or repo structure (e.g., branch name).")
+                    st.stop()
+
+                # Extract to temporary directory
                 try:
-                    response = requests.get(potential_zip_url, stream=True, timeout=30)
-                    response.raise_for_status()
-                    repo_zip_content = response.content
-                    st.write(f"Successfully downloaded zip for branch: {b}")
-                    break
+                    temp_dir_context = tempfile.TemporaryDirectory()
+                    temp_dir = temp_dir_context.name
+                    st.write(f"Extracting repository to temporary location...")
+                    with zipfile.ZipFile(io.BytesIO(repo_zip_content)) as zf:
+                        zf.extractall(temp_dir)
+                        zip_root_folder = zf.namelist()[0].split('/')[0] # e.g., 'repo-main'
+                        extracted_repo_root = os.path.join(temp_dir, zip_root_folder)
+                    st.write("Extraction complete.")
+
+                    # Determine the starting path for os.walk
+                    scan_start_path = extracted_repo_root
+                    base_path_for_relative = extracted_repo_root # For display
+                    if target_subdir_in_repo:
+                        potential_subdir_path = os.path.join(extracted_repo_root, target_subdir_in_repo.replace('%20', ' '))
+                        if os.path.isdir(potential_subdir_path):
+                            scan_start_path = potential_subdir_path
+                            base_path_for_relative = scan_start_path # Make path relative to subdir
+                            st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
+                        else:
+                            st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
+
+                    # Find Python files starting from the scan_start_path
+                    for root, dirs, files in os.walk(scan_start_path):
+                        dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
+                        for file in files:
+                            if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
+
                 except Exception as e:
-                    st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
-
-            if not repo_zip_content:
-                st.error("Could not download repository zip. Check URL or repo structure (e.g., branch name).")
-                st.stop()
-
-            # Extract to temporary directory
-            try:
-                temp_dir_context = tempfile.TemporaryDirectory()
-                temp_dir = temp_dir_context.name
-                st.write(f"Extracting repository to temporary location...")
-                with zipfile.ZipFile(io.BytesIO(repo_zip_content)) as zf:
-                    zf.extractall(temp_dir)
-                    zip_root_folder = zf.namelist()[0].split('/')[0] # e.g., 'repo-main'
-                    extracted_repo_root = os.path.join(temp_dir, zip_root_folder)
-                st.write("Extraction complete.")
-
-                # Determine the starting path for os.walk
-                scan_start_path = extracted_repo_root
-                base_path_for_relative = extracted_repo_root # For display
-                if target_subdir_in_repo:
-                    potential_subdir_path = os.path.join(extracted_repo_root, target_subdir_in_repo.replace('%20', ' '))
-                    if os.path.isdir(potential_subdir_path):
-                        scan_start_path = potential_subdir_path
-                        base_path_for_relative = scan_start_path # Make path relative to subdir
-                        st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
-                    else:
-                        st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
-
-                # Find Python files starting from the scan_start_path
-                for root, dirs, files in os.walk(scan_start_path):
-                    dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
-                    for file in files:
-                        if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
-
-            except Exception as e:
-                st.error(f"Error during zip extraction or file scanning: {e}")
-                if temp_dir_context: temp_dir_context.cleanup()
+                    st.error(f"Error during zip extraction or file scanning: {e}")
+                    if temp_dir_context: temp_dir_context.cleanup()
 
         elif os.path.exists(input_path_or_url):
             with st.spinner("Accessing source and finding Python files..."):
