@@ -369,6 +369,7 @@ with tab1:
         else:
             total_predicted_energy = 0
             total_scripts = 0
+            total_potential_savings = 0
 
             with results_placeholder:
                 for file_path in files_to_process:
@@ -403,16 +404,20 @@ with tab1:
                                 recommendations = get_openai_recommendations(source_code, features_dict)
                             st.markdown("**Recommendations:**")
                             st.markdown(recommendations) # Display recommendations using markdown
+                            if savings_percent > 0:
+                                estimated_saving = prediction * (savings_percent / 100.0)
+                                st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
+                                total_potential_savings += estimated_saving
 
                     st.divider() # Add divider between files
 
             # Update session state for summary tab
             st.session_state['total_scripts_analyzed'] = total_scripts
             st.session_state['total_predicted_consumption'] = total_predicted_energy
+            st.session_state['potential_total_savings'] = total_potential_savings
             # We can't accurately calculate the total savings without re-running the model on the modified code.
             # A very rough estimate could be based on the percentage improvements suggested by the AI,
             # but this would be highly speculative and potentially misleading.
-            st.session_state['potential_total_savings'] = 0 # Reset for each analysis
 
             if total_scripts > 0:
                 st.info(f"Analysis completed for {total_scripts} Python scripts.")
@@ -432,7 +437,7 @@ with tab2:
     st.header("Analysis Summary")
     st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
     st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
-    st.warning("Total Efficiency Saving after recommendations cannot be accurately calculated without re-analyzing the modified code.")
+    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
     st.info("The recommendations provided in the 'Analyze Code' tab offer potential areas for energy savings. Implementing these suggestions and re-running the analysis would be necessary to quantify the actual reduction in energy consumption.")
     # You could potentially add a placeholder or a very rough estimate here if you have a way to extract percentage savings from the recommendations, but it's not reliable.
     # st.metric("Estimated Total Efficiency Saving (Rough)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules (Estimate)")    
