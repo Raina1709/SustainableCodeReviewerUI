@@ -1,4 +1,4 @@
-# streamlit_app.py (v5 - Added Azure OpenAI Recommendations)
+# streamlit_app.py (v6 - Added Summary Tab)
 # UI for Python Script Energy Consumption Prediction + Recommendations
 
 import streamlit as st
@@ -18,8 +18,8 @@ from openai import AzureOpenAI # Import Azure OpenAI client
 # --- Configuration ---
 MODEL_FILENAME = 'random_forest_energy_model.joblib'
 FEATURES_ORDER = ['LOC', 'No_of_Functions', 'No_of_Classes', 'No_of_Loops',
-                  'Loop_Nesting_Depth', 'No_of_Conditional_Blocks', 'Import_Score',
-                  'I/O Calls']
+                    'Loop_Nesting_Depth', 'No_of_Conditional_Blocks', 'Import_Score',
+                    'I/O Calls']
 
 # --- Feature Extraction Code ---
 
@@ -74,9 +74,9 @@ def extract_features_and_code_from_file(file_path):
     try:
         tree = ast.parse(source_code)
     except Exception as e:
-         print(f"Error parsing script {file_path} with AST: {e}")
-         st.error(f"Could not parse file (invalid Python?): {os.path.basename(file_path)}")
-         return None, source_code # Return code even if parsing fails, maybe useful
+        print(f"Error parsing script {file_path} with AST: {e}")
+        st.error(f"Could not parse file (invalid Python?): {os.path.basename(file_path)}")
+        return None, source_code # Return code even if parsing fails, maybe useful
 
     # Calculate features...
     num_lines = len(source_code.splitlines())
@@ -92,9 +92,9 @@ def extract_features_and_code_from_file(file_path):
                 if lib: imported_libs.add(lib)
                 num_imports += 1
         elif isinstance(node, ast.ImportFrom):
-             if node.module: lib = node.module.split('.')[0];
-             if lib: imported_libs.add(lib)
-             num_imports += 1
+            if node.module: lib = node.module.split('.')[0];
+            if lib: imported_libs.add(lib)
+            num_imports += 1
     weighted_import_score = sum(library_weights.get(lib, 2) for lib in imported_libs)
     extractor = FeatureExtractor(); extractor.visit(tree)
     features_dict = {
@@ -111,8 +111,8 @@ def predict_for_features(model, features_dict):
         input_features = {key: [pd.to_numeric(value, errors='coerce')] for key, value in features_dict.items()}
         input_df = pd.DataFrame(input_features, columns=FEATURES_ORDER)
         if input_df.isnull().values.any():
-             st.error("Error: Non-numeric values found in extracted features during prediction step.")
-             return None
+            st.error("Error: Non-numeric values found in extracted features during prediction step.")
+            return None
         prediction = model.predict(input_df)
         return prediction[0]
     except Exception as e:
@@ -130,9 +130,9 @@ def get_openai_recommendations(source_code, features_dict):
         # Ensure you have created .streamlit/secrets.toml with your Azure keys
         # Check if secrets are loaded
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
-             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
-             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
-             return "Credentials configuration missing."
+            st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
+            st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
+            return "Credentials configuration missing."
 
         api_key = st.secrets["AZURE_OPENAI_API_KEY"]
         azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -177,7 +177,7 @@ def get_openai_recommendations(source_code, features_dict):
         Recommendations:
 
         Also give the percentage improvement in the Energy Efficiency after doing the recommended changes in the following format:
-        Recommendation | Efficiency Improvement
+        Recommendation | Percentage Improvement
         Algorithmic Efficiency | 5-10%
         Loop Optimizations | 1-3%
         """}
@@ -216,6 +216,7 @@ def get_openai_recommendations(source_code, features_dict):
         recommendations = f"Error fetching recommendations: {e}"
 
     return recommendations
+
 #--- Streamlit UI ---
 st.set_page_config(layout="wide")
 st.title("🐍 Sustainable Code Reviewer (Prototype)")
@@ -237,33 +238,42 @@ def load_model(filename):
 loaded_model = load_model(MODEL_FILENAME)
 st.success(f"Prediction Model loaded successfully.")
 
-#--- User Input ---
-st.header("Input")
-input_path_or_url = st.text_input(
-"Enter public GitHub repository URL:",
-placeholder="https://github.com/skills/introduction-to-github"
-)
+# --- State Variables for Summary ---
+if 'total_scripts_analyzed' not in st.session_state:
+    st.session_state['total_scripts_analyzed'] = 0
+if 'total_predicted_consumption' not in st.session_state:
+    st.session_state['total_predicted_consumption'] = 0
+if 'potential_total_savings' not in st.session_state:
+    st.session_state['potential_total_savings'] = 0 # Initialize total savings
 
-analyze_button = st.button("Analyze and Predict")
+# --- Tabs ---
+tab1, tab2 = st.tabs(["Analyze Code", "Summary"])
 
-#--- Analysis and Prediction Output Area ---
+# --- Analyze Code Tab ---
+with tab1:
+    st.header("Input")
+    input_path_or_url = st.text_input(
+        "Enter public GitHub repository URL or local file/directory path:",
+        placeholder="[https://github.com/skills/introduction-to-github](https://github.com/skills/introduction-to-github) or /path/to/your/script.py"
+    )
 
-files_to_process = []
-scan_source_description = ""
-temp_dir_context = None
-extracted_repo_root = None
-base_path_for_relative = None
-target_subdir_in_repo = None
+    analyze_button = st.button("Analyze")
 
-# --- Determine Input Type and Get Files ---
+    # --- Analysis and Prediction Output Area ---
+    files_to_process = []
+    scan_source_description = ""
+    temp_dir_context = None
+    extracted_repo_root = None
+    base_path_for_relative = None
+    target_subdir_in_repo = None
 
-if analyze_button:
-    # Check if input is a GitHub URL
-    if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
+    # --- Determine Input Type and Get Files ---
+    if analyze_button:
+        # ... (rest of the code for handling GitHub URLs and local files/directories remains the same) ...
+        if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
             scan_source_description = f"GitHub source: {input_path_or_url}"
             st.info(f"Processing {scan_source_description}")
 
-            # --- Improved URL Parsing ---
             match = re.match(r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/(.*))?)?", input_path_or_url)
             if not match:
                 st.error("Could not parse GitHub URL structure. Please provide URL to repo root or subdirectory.")
@@ -271,12 +281,10 @@ if analyze_button:
             user, repo, branch, _, subdir = match.groups()
             repo = repo.replace(".git", "")
             target_subdir_in_repo = subdir.strip('/') if subdir else None
-            repo_url_base = f"https://github.com/{user}/{repo}"
+            repo_url_base = f"[https://github.com/](https://github.com/){user}/{repo}"
             st.write(f"Detected Repository Base: {repo_url_base}")
             if target_subdir_in_repo: st.write(f"Detected Target Subdirectory: {target_subdir_in_repo}")
-            # --- End Improved URL Parsing ---
 
-            # Attempt download using common branches (use specified branch first if available)
             potential_branches = [branch] if branch else ['main', 'master']
             repo_zip_content = None
             for b in potential_branches:
@@ -288,10 +296,8 @@ if analyze_button:
                     repo_zip_content = response.content
                     st.write(f"Successfully downloaded zip for branch: {b}")
                     break
-                except requests.exceptions.RequestException as e:
-                     st.write(f"Could not download zip for branch '{b}': {e}")
                 except Exception as e:
-                     st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
+                    st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
 
             if not repo_zip_content:
                 st.error("Could not download repository zip. Check URL or repo structure (e.g., branch name).")
@@ -314,11 +320,11 @@ if analyze_button:
                 if target_subdir_in_repo:
                     potential_subdir_path = os.path.join(extracted_repo_root, target_subdir_in_repo.replace('%20', ' '))
                     if os.path.isdir(potential_subdir_path):
-                         scan_start_path = potential_subdir_path
-                         base_path_for_relative = scan_start_path # Make path relative to subdir
-                         st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
+                        scan_start_path = potential_subdir_path
+                        base_path_for_relative = scan_start_path # Make path relative to subdir
+                        st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
                     else:
-                         st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
+                        st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
 
                 # Find Python files starting from the scan_start_path
                 for root, dirs, files in os.walk(scan_start_path):
@@ -330,82 +336,98 @@ if analyze_button:
                 st.error(f"Error during zip extraction or file scanning: {e}")
                 if temp_dir_context: temp_dir_context.cleanup()
 
-    elif os.path.exists(input_path_or_url):
-        with st.spinner("Accessing source and finding Python files..."):
-            base_path_for_relative = input_path_or_url # Store base path
-            if os.path.isfile(input_path_or_url) and input_path_or_url.endswith(".py"):
-                scan_source_description = f"local file: {input_path_or_url}"
-                st.info(f"Processing {scan_source_description}")
-                files_to_process.append(input_path_or_url)
-                base_path_for_relative = os.path.dirname(input_path_or_url) # Use dir for relative path
-            elif os.path.isdir(input_path_or_url):
-                scan_source_description = f"local directory: {input_path_or_url}"
-                st.info(f"Processing {scan_source_description}")
-                for root, dirs, files in os.walk(input_path_or_url):
-                    dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
-                    for file in files:
-                        if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
+        elif os.path.exists(input_path_or_url):
+            with st.spinner("Accessing source and finding Python files..."):
+                base_path_for_relative = input_path_or_url # Store base path
+                if os.path.isfile(input_path_or_url) and input_path_or_url.endswith(".py"):
+                    scan_source_description = f"local file: {input_path_or_url}"
+                    st.info(f"Processing {scan_source_description}")
+                    files_to_process.append(input_path_or_url)
+                    base_path_for_relative = os.path.dirname(input_path_or_url) # Use dir for relative path
+                elif os.path.isdir(input_path_or_url):
+                    scan_source_description = f"local directory: {input_path_or_url}"
+                    st.info(f"Processing {scan_source_description}")
+                    for root, dirs, files in os.walk(input_path_or_url):
+                        dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
+                        for file in files:
+                            if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
+                else:
+                    st.error(f"Local path is not a directory or a .py file: {input_path_or_url}")
+        else:
+            st.error(f"Input path or URL not found or not recognized: {input_path_or_url}")
+
+        # --- Process Files ---
+        st.header("Analysis Results")
+        results_placeholder = st.container() # Use a container to group results
+        if not files_to_process:
+            st.warning("No Python files found to process.")
+        else:
+            total_predicted_energy = 0
+            total_scripts = 0
+
+            with results_placeholder:
+                for file_path in files_to_process:
+                    display_path = os.path.basename(file_path) # Default
+                    try: # Try getting relative path
+                        if base_path_for_relative and os.path.commonpath([base_path_for_relative, file_path]) == os.path.normpath(base_path_for_relative):
+                            display_path = os.path.relpath(file_path, base_path_for_relative)
+                    except ValueError: display_path = os.path.basename(file_path)
+
+                    st.subheader(f"Results for: {display_path}")
+
+                    # Extract features AND source code
+                    features_dict, source_code = extract_features_and_code_from_file(file_path) # Handles its own errors via st.error
+
+                    if features_dict and source_code:
+                        # Display features
+                        st.write("🔍 **Extracted Features:**")
+                        output_str = "\n".join([f"  • {key.replace('_', ' '):<25} : {value}" for key, value in features_dict.items()])
+                        st.code(output_str, language=None)
+
+                        # Predict Energy
+                        prediction = predict_for_features(loaded_model, features_dict) # Handles its own errors via st.error
+
+                        if prediction is not None:
+                            st.success(f"**Predicted Energy: {prediction:.2f} joules**")
+                            total_predicted_energy += prediction
+                            total_scripts += 1
+
+                            # Get OpenAI Recommendations
+                            st.write("💡 **Fetching Energy Saving Recommendations...**")
+                            with st.spinner("Contacting Azure OpenAI..."):
+                                recommendations = get_openai_recommendations(source_code, features_dict)
+                            st.markdown("**Recommendations:**")
+                            st.markdown(recommendations) # Display recommendations using markdown
+
+                    st.divider() # Add divider between files
+
+            # Update session state for summary tab
+            st.session_state['total_scripts_analyzed'] = total_scripts
+            st.session_state['total_predicted_consumption'] = total_predicted_energy
+            # We can't accurately calculate the total savings without re-running the model on the modified code.
+            # A very rough estimate could be based on the percentage improvements suggested by the AI,
+            # but this would be highly speculative and potentially misleading.
+            st.session_state['potential_total_savings'] = 0 # Reset for each analysis
+
+            if total_scripts > 0:
+                st.info(f"Analysis completed for {total_scripts} Python scripts.")
             else:
-                st.error(f"Local path is not a directory or a .py file: {input_path_or_url}")
-    else:
-        st.error(f"Input path or URL not found or not recognized: {input_path_or_url}")
-            
-        # --- End Determine Input Type ---
+                st.info("No Python scripts were analyzed.")
 
-# --- Process Files ---
-st.header("Results")
-results_placeholder = st.container() # Use a container to group results
-if not files_to_process:
-    st.warning("No Python files found to process.")
-else:
-    overall_success_count = 0
+        # Cleanup temporary directory
+        if temp_dir_context:
+            try:
+                temp_dir_context.cleanup()
+                st.write("Temporary directory cleaned up.")
+            except Exception as e:
+                st.warning(f"Could not automatically clean up temp directory. Error: {e}")
 
-    with results_placeholder:
-        for file_path in files_to_process:
-            display_path = os.path.basename(file_path) # Default
-            try: # Try getting relative path
-                 if base_path_for_relative and os.path.commonpath([base_path_for_relative, file_path]) == os.path.normpath(base_path_for_relative):
-                      display_path = os.path.relpath(file_path, base_path_for_relative)
-            except ValueError: display_path = os.path.basename(file_path)
-
-            st.subheader(f"Results for: {display_path}")
-
-            # Extract features AND source code
-            features_dict, source_code = extract_features_and_code_from_file(file_path) # Handles its own errors via st.error
-
-            if features_dict and source_code:
-                # Display features
-                st.write("🔍 **Extracted Features:**")
-                output_str = "\n".join([f"  • {key.replace('_', ' '):<25} : {value}" for key, value in features_dict.items()])
-                st.code(output_str, language=None)
-
-                # Predict Energy
-                prediction = predict_for_features(loaded_model, features_dict) # Handles its own errors via st.error
-
-                if prediction is not None:
-                    st.success(f"**Predicted Energy: {prediction:.2f} joules**")
-                    overall_success_count += 1
-
-                    # Get OpenAI Recommendations
-                    st.write("💡 **Fetching Energy Saving Recommendations...**")
-                    # Using a spinner specific to the API call
-                    with st.spinner("Contacting Azure OpenAI..."):
-                         recommendations = get_openai_recommendations(source_code, features_dict)
-                    st.markdown("**Recommendations:**")
-                    st.markdown(recommendations) # Display recommendations using markdown
-                # No 'else' needed as predict_for_features shows st.error
-
-            # No 'else' needed as extract_features_and_code_from_file shows st.error
-
-            st.divider() # Add divider between files
-
-# Cleanup temporary directory
-if temp_dir_context:
-    try:
-        temp_dir_context.cleanup()
-        st.write("Temporary directory cleaned up.")
-    except Exception as e:
-        st.warning(f"Could not automatically clean up temp directory. Error: {e}")
-
-
-
+# --- Summary Tab ---
+with tab2:
+    st.header("Analysis Summary")
+    st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
+    st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
+    st.warning("Total Efficiency Saving after recommendations cannot be accurately calculated without re-analyzing the modified code.")
+    st.info("The recommendations provided in the 'Analyze Code' tab offer potential areas for energy savings. Implementing these suggestions and re-running the analysis would be necessary to quantify the actual reduction in energy consumption.")
+    # You could potentially add a placeholder or a very rough estimate here if you have a way to extract percentage savings from the recommendations, but it's not reliable.
+    # st.metric("Estimated Total Efficiency Saving (Rough)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules (Estimate)")    
