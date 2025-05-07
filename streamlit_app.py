@@ -1,4 +1,4 @@
-# streamlit_app.py (v6 - Added Summary Tab)
+# streamlit_app.py (v7 - Added Rough Estimated Savings)
 # UI for Python Script Energy Consumption Prediction + Recommendations
 
 import streamlit as st
@@ -22,7 +22,7 @@ FEATURES_ORDER = ['LOC', 'No_of_Functions', 'No_of_Classes', 'No_of_Loops',
                     'I/O Calls']
 
 # --- Feature Extraction Code ---
-
+# (Keep the FeatureExtractor and extract_features_and_code_from_file functions as they are)
 library_weights = {
     "torch": 10, "tensorflow": 10, "jax": 9, "keras": 9, "transformers": 9, "lightgbm": 8,
     "xgboost": 8, "catboost": 8, "sklearn": 7, "scikit-learn": 7, "pandas": 6, "numpy": 6,
@@ -38,7 +38,6 @@ library_weights = {
     "jupyter": 2
 }
 file_io_funcs = {'open', 'read', 'write', 'remove', 'rename', 'copy', 'seek', 'tell', 'flush'}
-
 class FeatureExtractor(ast.NodeVisitor):
     def __init__(self):
         self.max_loop_depth = 0; self.current_depth = 0; self.file_io_calls = 0
@@ -54,14 +53,7 @@ class FeatureExtractor(ast.NodeVisitor):
         elif isinstance(node.func, ast.Attribute): func_name = node.func.attr
         if func_name in file_io_funcs: self.file_io_calls += 1
         self.generic_visit(node)
-
-
-# Modified to also return the source code string
 def extract_features_and_code_from_file(file_path):
-    """
-    Reads a Python file, extracts static code features and source code.
-    Returns (features_dict, source_code_string) or (None, None) on failure.
-    """
     source_code = None
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -69,16 +61,13 @@ def extract_features_and_code_from_file(file_path):
     except Exception as e:
         print(f"Error reading script file {file_path}: {e}")
         st.error(f"Could not read file: {os.path.basename(file_path)}")
-        return None, None # Return None for both
-
+        return None, None
     try:
         tree = ast.parse(source_code)
     except Exception as e:
         print(f"Error parsing script {file_path} with AST: {e}")
         st.error(f"Could not parse file (invalid Python?): {os.path.basename(file_path)}")
-        return None, source_code # Return code even if parsing fails, maybe useful
-
-    # Calculate features...
+        return None, source_code
     num_lines = len(source_code.splitlines())
     num_functions = sum(isinstance(node, ast.FunctionDef) for node in ast.walk(tree))
     num_classes = sum(isinstance(node, ast.ClassDef) for node in ast.walk(tree))
@@ -103,10 +92,8 @@ def extract_features_and_code_from_file(file_path):
         'No_of_Conditional_Blocks': num_conditional_blocks, 'Import_Score': weighted_import_score,
         'I/O Calls': extractor.file_io_calls
     }
-    return features_dict, source_code # Return both
-
+    return features_dict, source_code
 def predict_for_features(model, features_dict):
-    # (Same as before)
     try:
         input_features = {key: [pd.to_numeric(value, errors='coerce')] for key, value in features_dict.items()}
         input_df = pd.DataFrame(input_features, columns=FEATURES_ORDER)
@@ -119,17 +106,14 @@ def predict_for_features(model, features_dict):
         st.error(f"Error during prediction step: {e}")
         return None
 
-# --- Azure OpenAI Function ---
+# --- Azure OpenAI Function (Modified to Extract Percentage) ---
 # @st.cache_data # Optionally cache OpenAI responses for a short time
 def get_openai_recommendations(source_code, features_dict):
-    """Sends code and features to Azure OpenAI for recommendations."""
+    """Sends code and features to Azure OpenAI for recommendations and tries to extract savings."""
     recommendations = "Could not retrieve recommendations." # Default message
     potential_savings_percent = 0.0
     try:
         # --- IMPORTANT: Configure Credentials ---
-        # Uses Streamlit Secrets Management (secrets.toml) - Recommended for deployment
-        # Ensure you have created .streamlit/secrets.toml with your Azure keys
-        # Check if secrets are loaded
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
@@ -140,7 +124,6 @@ def get_openai_recommendations(source_code, features_dict):
         api_version = st.secrets["AZURE_OPENAI_API_VERSION"]
         deployment_name = st.secrets["AZURE_OPENAI_DEPLOYMENT_NAME"]
 
-        # Check if values are actually set (secrets might exist but be empty)
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
             st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
             return "Credentials configuration incomplete.", potential_savings_percent
@@ -177,10 +160,7 @@ def get_openai_recommendations(source_code, features_dict):
         {source_code}
         Recommendations:
 
-        Also give the percentage improvement in the Energy Efficiency after doing the recommended changes in the following format:
-        Recommendation | Percentage Improvement
-        Algorithmic Efficiency | 5-10%
-        Loop Optimizations | 1-3%
+        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
         """}
         ]
 
@@ -197,7 +177,7 @@ def get_openai_recommendations(source_code, features_dict):
             stop=None
         )
 
-        # --- Extract Response ---
+        # --- Extract Response and Attempt to Parse Savings ---
         if response.choices:
             recommendations = response.choices[0].message.content.strip()
             if not recommendations: # Handle empty response case
@@ -228,7 +208,7 @@ def get_openai_recommendations(source_code, features_dict):
         st.error(f"Error calling Azure OpenAI API: {e}")
         recommendations = f"Error fetching recommendations: {e}"
 
-    return recommendations
+    return recommendations, potential_savings_percent
 
 #--- Streamlit UI ---
 st.set_page_config(layout="wide")
@@ -247,7 +227,6 @@ def load_model(filename):
         st.stop()
 
 #--- Load Model ---
-#This function is defined above, using @st.cache_resource
 loaded_model = load_model(MODEL_FILENAME)
 st.success(f"Prediction Model loaded successfully.")
 
@@ -257,7 +236,7 @@ if 'total_scripts_analyzed' not in st.session_state:
 if 'total_predicted_consumption' not in st.session_state:
     st.session_state['total_predicted_consumption'] = 0
 if 'potential_total_savings' not in st.session_state:
-    st.session_state['potential_total_savings'] = 0 # Initialize total savings
+    st.session_state['potential_total_savings'] = 0
 
 # --- Tabs ---
 tab1, tab2 = st.tabs(["Analyze Code", "Summary"])
@@ -381,8 +360,8 @@ with tab1:
             st.warning("No Python files found to process.")
         else:
             total_predicted_energy = 0
-            total_scripts = 0
             total_potential_savings = 0
+            total_scripts = 0
 
             with results_placeholder:
                 for file_path in files_to_process:
@@ -411,12 +390,13 @@ with tab1:
                             total_predicted_energy += prediction
                             total_scripts += 1
 
-                            # Get OpenAI Recommendations
+                            # Get OpenAI Recommendations (Modified to return savings percent)
                             st.write("💡 **Fetching Energy Saving Recommendations...**")
                             with st.spinner("Contacting Azure OpenAI..."):
                                 recommendations, savings_percent = get_openai_recommendations(source_code, features_dict)
                             st.markdown("**Recommendations:**")
                             st.markdown(recommendations) # Display recommendations using markdown
+
                             if savings_percent > 0:
                                 estimated_saving = prediction * (savings_percent / 100.0)
                                 st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
@@ -428,9 +408,6 @@ with tab1:
             st.session_state['total_scripts_analyzed'] = total_scripts
             st.session_state['total_predicted_consumption'] = total_predicted_energy
             st.session_state['potential_total_savings'] = total_potential_savings
-            # We can't accurately calculate the total savings without re-running the model on the modified code.
-            # A very rough estimate could be based on the percentage improvements suggested by the AI,
-            # but this would be highly speculative and potentially misleading.
 
             if total_scripts > 0:
                 st.info(f"Analysis completed for {total_scripts} Python scripts.")
@@ -451,6 +428,4 @@ with tab2:
     st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
     st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
     st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
-    st.info("The recommendations provided in the 'Analyze Code' tab offer potential areas for energy savings. Implementing these suggestions and re-running the analysis would be necessary to quantify the actual reduction in energy consumption.")
-    # You could potentially add a placeholder or a very rough estimate here if you have a way to extract percentage savings from the recommendations, but it's not reliable.
-    # st.metric("Estimated Total Efficiency Saving (Rough)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules (Estimate)")    
+    st.info("The 'Estimated Total Potential Saving' is a rough calculation based on the percentage improvements suggested by the AI. Actual savings may vary after implementing the recommendations.")
