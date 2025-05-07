@@ -401,7 +401,7 @@ with tab1:
                             # Get OpenAI Recommendations
                             st.write("💡 **Fetching Energy Saving Recommendations...**")
                             with st.spinner("Contacting Azure OpenAI..."):
-                                recommendations = get_openai_recommendations(source_code, features_dict)
+                                recommendations, savings_percent = get_openai_recommendations(source_code, features_dict)
                             st.markdown("**Recommendations:**")
                             st.markdown(recommendations) # Display recommendations using markdown
                             if savings_percent > 0:
