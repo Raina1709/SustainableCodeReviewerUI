@@ -186,7 +186,7 @@ def get_openai_recommendations(source_code, features_dict):
                 recommendations = "AI model returned an empty recommendation."
             else:
                 # Try to find percentage savings in the recommendations
-                savings_matches = re.findall(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
+                savings_matches = re.findall(r"\(Total Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
                 if savings_matches:
                     # Take the higher end of the first found range as a rough estimate
                     try:
