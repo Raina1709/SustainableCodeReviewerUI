@@ -433,7 +433,7 @@ with tab1:
                           else:
                               st.info("No overall percentage-based energy saving estimate found from the AI.")
   
-                      st.divider() # Add divider between files
+                    st.divider() # Add divider between files
   
               # Update session state for summary tab
               st.session_state['total_scripts_analyzed'] = total_scripts
