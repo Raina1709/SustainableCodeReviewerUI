@@ -210,8 +210,8 @@ def get_openai_recommendations(source_code, features_dict):
     return recommendations, potential_savings_percent
 
 #--- Streamlit UI ---
-st.set_page_config(layout="wide")
-st.title("🐍 Sustainable Code Reviewer (Prototype)")
+st.set_page_config(layout="wide", page_title = "Sustainable Code Review Assistant")
+st.title("🐍 Sustainable Code Review Assistant")
 
 @st.cache_resource # Cache the loaded model
 def load_model(filename):
