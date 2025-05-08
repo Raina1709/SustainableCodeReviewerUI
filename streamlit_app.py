@@ -399,7 +399,7 @@ with tab1:
                             if savings_percent > 0:
                                 estimated_saving = prediction * (savings_percent / 100.0)
                                 st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
-                                total_potential_savings += estimated_saving
+                                st.session_state['potential_total_savings'] += estimated_saving
 
                     st.divider() # Add divider between files
 
