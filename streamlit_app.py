@@ -435,9 +435,9 @@ with tab1:
   
                     st.divider() # Add divider between files
   
-              # Update session state for summary tab
-              st.session_state['total_scripts_analyzed'] = total_scripts
-              st.session_state['total_predicted_consumption'] = total_predicted_energy
+                # Update session state for summary tab
+                st.session_state['total_scripts_analyzed'] = total_scripts
+                st.session_state['total_predicted_consumption'] = total_predicted_energy
 # --- Summary Tab ---
 with tab2:
     st.header("Analysis Summary")
