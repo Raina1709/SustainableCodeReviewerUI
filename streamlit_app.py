@@ -1,3 +1,6 @@
+# streamlit_app.py (v7 - Added Rough Estimated Savings)
+# UI for Python Script Energy Consumption Prediction + Recommendations
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -158,6 +161,8 @@ def get_openai_recommendations(source_code, features_dict):
         Recommendations:
 
         Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
+
+        At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
         """}
         ]
 
@@ -243,10 +248,10 @@ with tab1:
     st.header("Input")
     input_path_or_url = st.text_input(
         "Enter public GitHub repository URL or local file/directory path:",
-        placeholder="[https://github.com/skills/introduction-to-github](https://github.com/skills/introduction-to-github) or /path/to/your/script.py"
+        placeholder="https://github.com/skills/introduction-to-github"
     )
 
-    analyze_button = st.button("Analyze")
+    analyze_button = st.button("Analyze and Predict")
 
     # --- Analysis and Prediction Output Area ---
     files_to_process = []
