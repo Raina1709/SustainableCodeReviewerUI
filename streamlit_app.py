@@ -108,10 +108,20 @@ def predict_for_features(model, features_dict):
 
 # --- Azure OpenAI Function (Modified to Extract Percentage) ---
 # @st.cache_data # Optionally cache OpenAI responses for a short time
+# streamlit_app.py (showing only the modified function and its context)
+# ... (other imports and existing code before the function) ...
+import re # Ensure re is imported
+import streamlit as st # Ensure streamlit is imported for st.warning/st.text (debugging)
+from openai import AzureOpenAI # Ensure AzureOpenAI is imported
+
+# ... (library_weights, file_io_funcs, FeatureExtractor, extract_features_and_code_from_file, predict_for_features functions remain the same) ...
+
+# --- Azure OpenAI Function (Further Improved Parsing for Savings) ---
+# @st.cache_data # Optionally cache OpenAI responses for a short time
 def get_openai_recommendations(source_code, features_dict):
     """Sends code and features to Azure OpenAI for recommendations and tries to extract and sum savings percentages."""
     recommendations = "Could not retrieve recommendations." # Default message
-    potential_savings_percent = 0.0  # Initialize the return value for savings percentage
+    potential_savings_percent = 0.0  # Initialize the return value
 
     try:
         # --- IMPORTANT: Configure Credentials ---
@@ -137,7 +147,6 @@ def get_openai_recommendations(source_code, features_dict):
 
         # --- Construct the Prompt ---
         features_str = "\n".join([f"- {key.replace('_', ' ')}: {value}" for key, value in features_dict.items()])
-
         prompt_messages = [
             {"role": "system", "content": "You are an expert Python programmer specialized in code optimization for energy efficiency. Analyze the provided code and its static features to suggest specific, actionable changes that would likely reduce its energy consumption during execution."},
             {"role": "user", "content": f"""Please analyze the following Python code for potential energy optimizations.
@@ -161,16 +170,16 @@ def get_openai_recommendations(source_code, features_dict):
             ```
             Recommendations:
 
-            Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
+            For each recommendation that offers quantifiable savings, please include the **estimated percentage improvement in energy efficiency** using the exact format: **(Estimated Saving: X%)** or **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated for a specific recommendation, please omit this tag for that item.
 
-            At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
-            """}
+            At the end, also provide the total energy saved in joules if possible, using the format: **Total Energy Saved: Z joules**.
+            """} # Made the prompt for percentage format slightly more emphatic
         ]
 
         # --- Make API Call ---
-        st.write("_Contacting Azure OpenAI... (This may take a moment)_") # Give user feedback
+        st.write("_Contacting Azure OpenAI... (This may take a moment)_")
         response = client.chat.completions.create(
-            model=deployment_name, # Your deployment name
+            model=deployment_name,
             messages=prompt_messages,
             temperature=0.5,
             max_tokens=4000,
@@ -183,50 +192,70 @@ def get_openai_recommendations(source_code, features_dict):
         # --- Extract Response and Attempt to Parse Savings ---
         if response.choices:
             recommendations = response.choices[0].message.content.strip()
+
+            # --- DEBUGGING: Uncomment to see the raw AI response ---
+            # st.markdown("--- AI Raw Response for Debugging ---")
+            # st.text_area("Raw Response:", recommendations, height=200)
+            # st.markdown("--- End AI Raw Response ---")
+
             if not recommendations:
                 recommendations = "AI model returned an empty recommendation."
-                # potential_savings_percent remains 0.0
             else:
-                # Try to find all percentage savings in the recommendations
-                # Regex captures X in "X%" or "X-Y%" as group 1, and Y in "X-Y%" as group 2.
-                # Added \s* for robustness with spaces.
-                savings_matches = re.findall(r"\(Estimated Saving:\s*(\d+\.?\d*)\s*-?\s*(\d*\.?\d*)?%?\)", recommendations)
-                
-                accumulated_percentage_savings = 0.0 # Accumulator for summing percentages
+                # Regex: Looks for "(Estimated Saving:" (case-insensitive)
+                # then captures the first number (X) and optionally a second number (Y) if a hyphen is present.
+                # Allows for optional % sign.
+                savings_matches = re.findall(
+                    r"\(Estimated Saving:\s*(\d+\.?\d*)\s*-?\s*(\d*\.?\d*)?%?\)",
+                    recommendations,
+                    re.IGNORECASE # Make "Estimated Saving" case-insensitive
+                )
+
+                # --- DEBUGGING: Check if regex found matches ---
+                # if not savings_matches and "saving" in recommendations.lower():
+                #     st.warning("The term 'saving' was found in the AI response, but the regex did not find any matches in the expected format.")
+                # elif savings_matches:
+                #     st.info(f"Regex found the following potential savings matches: {savings_matches}")
+
+
+                accumulated_percentage_savings = 0.0
                 if savings_matches:
                     for match_tuple in savings_matches:
                         try:
-                            primary_value_str = match_tuple[0]   # X from "X%" or "X-Y%"
-                            secondary_value_str = match_tuple[1] # Y from "X-Y%" (can be empty string)
+                            primary_value_str = match_tuple[0]
+                            secondary_value_str = match_tuple[1]
+                            
+                            value_to_add_str = ""
 
-                            if secondary_value_str: # If it's a range like X-Y%
-                                # Take the higher value (Y) from the range
-                                accumulated_percentage_savings += float(secondary_value_str)
-                            elif primary_value_str: # If it's a single value like X%
-                                accumulated_percentage_savings += float(primary_value_str)
+                            if secondary_value_str and secondary_value_str.strip(): # Y value from X-Y% range
+                                value_to_add_str = secondary_value_str.strip()
+                            elif primary_value_str and primary_value_str.strip(): # X value
+                                value_to_add_str = primary_value_str.strip()
+                            
+                            if value_to_add_str: # If we have a valid string to convert
+                                accumulated_percentage_savings += float(value_to_add_str)
+                                # --- DEBUGGING: Log successful parsing ---
+                                # st.write(f"Successfully parsed and added: {float(value_to_add_str)}% from '{match_tuple}'")
                         except ValueError:
-                            # Optional: Log or warn if a specific match can't be parsed.
-                            # For example: st.warning(f"Could not parse a saving value from AI response: {match_tuple}")
-                            pass # Skip this problematic match and continue with the next one
+                            # --- DEBUGGING: Log parsing errors ---
+                            # st.warning(f"Could not parse a number from saving value in AI response. Match: {match_tuple}, Attempted string: '{value_to_add_str}'")
+                            pass # Skip this problematic match
                 
-                potential_savings_percent = accumulated_percentage_savings # Assign the sum
-
-        else: # No response.choices
+                potential_savings_percent = accumulated_percentage_savings
+        else:
             recommendations = "No recommendations received from API (response structure unexpected)."
-            # potential_savings_percent remains 0.0
 
     except ImportError:
         st.error("The 'openai' library is not installed. Please add it to requirements.txt and reinstall.")
         recommendations = "OpenAI library not found."
-        # potential_savings_percent remains 0.0
     except KeyError as e:
         st.error(f"Azure OpenAI credential '{e}' not found in Streamlit Secrets (secrets.toml).")
         recommendations = f"Credential configuration missing: {e}"
-        # potential_savings_percent remains 0.0
     except Exception as e:
         st.error(f"Error calling Azure OpenAI API: {e}")
         recommendations = f"Error fetching recommendations: {e}"
-        # potential_savings_percent remains 0.0
+        # Consider logging the full exception e for more details during debugging
+        # import traceback
+        # st.text(traceback.format_exc())
 
     return recommendations, potential_savings_percent
 
