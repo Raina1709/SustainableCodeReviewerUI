@@ -1,6 +1,3 @@
-# streamlit_app.py (v7 - Added Rough Estimated Savings)
-# UI for Python Script Energy Consumption Prediction + Recommendations
-
 import streamlit as st
 import pandas as pd
 import joblib
@@ -160,7 +157,7 @@ def get_openai_recommendations(source_code, features_dict):
         {source_code}
         Recommendations:
 
-        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
+        Also give the **estimated energy savings in Joules** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X Joules)**.
 
         At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
         """}
