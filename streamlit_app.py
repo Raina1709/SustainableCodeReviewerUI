@@ -108,16 +108,17 @@ def predict_for_features(model, features_dict):
 
 # --- Azure OpenAI Function (Modified to Extract Percentage) ---
 # @st.cache_data # Optionally cache OpenAI responses for a short time
-def get_openai_recommendations(source_code, features_dict):
+def get_openai_recommendations(source_code, features_dict, predicted_energy):
     """Sends code and features to Azure OpenAI for recommendations and tries to extract savings."""
-    recommendations = "Could not retrieve recommendations." # Default message
-    potential_savings_percent = 0.0
+    recommendations_with_savings = []
+    total_estimated_saving_for_script = 0.0
+    total_estimated_saving_percentage = None
     try:
         # --- IMPORTANT: Configure Credentials ---
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
-            return "Credentials configuration missing.", potential_savings_percent
+            return "Credentials configuration missing.", 0.0
 
         api_key = st.secrets["AZURE_OPENAI_API_KEY"]
         azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -126,8 +127,7 @@ def get_openai_recommendations(source_code, features_dict):
 
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
             st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
-            return "Credentials configuration incomplete.", potential_savings_percent
-
+            return "Credentials configuration incomplete.", 0.0
 
         client = AzureOpenAI(
             api_key=api_key,
@@ -158,11 +158,11 @@ def get_openai_recommendations(source_code, features_dict):
         Source Code:
         ```python
         {source_code}
-        Recommendations:
+        ```
 
-        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
+        For each recommendation, please also provide a rough **estimated percentage improvement in energy efficiency** if the recommendation is implemented, in the following format: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
 
-        At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
+        Finally, at the very end, calculate and state the **total estimated energy saved** for this script. If the exact joules cannot be determined, please provide an estimated percentage range of the total energy saving for the entire script (e.g., "Total Estimated Energy Saved: X-Y%").
         """}
         ]
 
@@ -181,37 +181,57 @@ def get_openai_recommendations(source_code, features_dict):
 
         # --- Extract Response and Attempt to Parse Savings ---
         if response.choices:
-            recommendations = response.choices[0].message.content.strip()
-            if not recommendations: # Handle empty response case
-                recommendations = "AI model returned an empty recommendation."
+            full_response = response.choices[0].message.content.strip()
+            if not full_response: # Handle empty response case
+                return "AI model returned an empty recommendation.", 0.0
             else:
-                # Try to find percentage savings in the recommendations
-                savings_matches = re.findall(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
-                if savings_matches:
-                    # Take the higher end of the first found range as a rough estimate
-                    try:
-                        if savings_matches[0][1]:
-                            potential_savings_percent = float(savings_matches[0][1])
+                recommendation_blocks = full_response.split("\n\n") # Split into potential recommendations
+
+                for block in recommendation_blocks:
+                    saving_match = re.search(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", block)
+                    recommendation_text = block.split("(")[0].strip() # Extract text before saving info
+                    estimated_saving_percent = None
+
+                    if saving_match:
+                        lower_bound = float(saving_match.group(1))
+                        upper_bound = saving_match.group(2)
+                        if upper_bound:
+                            estimated_saving_percent = float(upper_bound)
                         else:
-                            potential_savings_percent = float(savings_matches[0][0])
-                    except ValueError:
-                        potential_savings_percent = 0.0
+                            estimated_saving_percent = lower_bound
+
+                    if estimated_saving_percent is not None and predicted_energy is not None:
+                        saving_joules = predicted_energy * (estimated_saving_percent / 100.0)
+                        total_estimated_saving_for_script += saving_joules
+                        recommendations_with_savings.append((recommendation_text, f"{estimated_saving_percent:.0f}%", f"{saving_joules:.2f} joules"))
+                    else:
+                        recommendations_with_savings.append((recommendation_text, "N/A", "N/A"))
+
+                # Look for the total estimated saving percentage
+                total_saving_match = re.search(r"Total Estimated Energy Saved:.*?(\d+)-?(\d*)%?", full_response, re.IGNORECASE)
+                if total_saving_match:
+                    lower_percent = float(total_saving_match.group(1))
+                    upper_percent = total_saving_match.group(2)
+                    if upper_percent:
+                        total_estimated_saving_percentage = (lower_percent + float(upper_percent)) / 2.0 # Take the average
+                    else:
+                        total_estimated_saving_percentage = lower_percent
+
         else:
-            recommendations = "No recommendations received from API (response structure unexpected)."
+            return "No recommendations received from API (response structure unexpected).", 0.0
 
     except ImportError:
         st.error("The 'openai' library is not installed. Please add it to requirements.txt and reinstall.")
-        recommendations = "OpenAI library not found."
+        return "OpenAI library not found.", 0.0
     except KeyError as e:
         # This catches cases where a secret isn't defined in secrets.toml
         st.error(f"Azure OpenAI credential '{e}' not found in Streamlit Secrets (secrets.toml).")
-        recommendations = f"Credential configuration missing: {e}"
+        return f"Credential configuration missing: {e}", 0.0
     except Exception as e:
         st.error(f"Error calling Azure OpenAI API: {e}")
-        recommendations = f"Error fetching recommendations: {e}"
+        return f"Error fetching recommendations: {e}", 0.0
 
-    return recommendations, potential_savings_percent
-
+    return recommendations_with_savings, total_estimated_saving_for_script, total_estimated_saving_percentage
 #--- Streamlit UI ---
 st.set_page_config(layout="wide", page_title="Sustainable Code Review Assistant")
 st.title("🐍 Sustainable Code Review Assistant")
@@ -388,45 +408,51 @@ with tab1:
                         prediction = predict_for_features(loaded_model, features_dict) # Handles its own errors via st.error
 
                         if prediction is not None:
-                            st.success(f"**Predicted Energy: {prediction:.2f} joules**")
-                            total_predicted_energy += prediction
-                            total_scripts += 1
-
-                            # Get OpenAI Recommendations (Modified to return savings percent)
-                            st.write("💡 **Fetching Energy Saving Recommendations...**")
-                            with st.spinner("Contacting Azure OpenAI..."):
-                                recommendations, savings_percent = get_openai_recommendations(source_code, features_dict)
-                            st.markdown("**Recommendations:**")
-                            st.markdown(recommendations) # Display recommendations using markdown
-
-                            if savings_percent > 0:
-                                estimated_saving = prediction * (savings_percent / 100.0)
-                                st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
-                                total_potential_savings += estimated_saving
-
-                    st.divider() # Add divider between files
-
-            # Update session state for summary tab
-            st.session_state['total_scripts_analyzed'] = total_scripts
-            st.session_state['total_predicted_consumption'] = total_predicted_energy
-            st.session_state['potential_total_savings'] = total_potential_savings
-
-            if total_scripts > 0:
-                st.info(f"Analysis completed for {total_scripts} Python scripts.")
-            else:
-                st.info("No Python scripts were analyzed.")
-
-        # Cleanup temporary directory
-        if temp_dir_context:
-            try:
-                temp_dir_context.cleanup()
-                st.write("Temporary directory cleaned up.")
-            except Exception as e:
-                st.warning(f"Could not automatically clean up temp directory. Error: {e}")
-
+                          st.success(f"**Predicted Energy: {prediction:.2f} joules**")
+                          total_predicted_energy += prediction
+                          total_scripts += 1
+  
+                          # Get OpenAI Recommendations (Modified to return savings with details and total percentage)
+                          st.write("💡 **Fetching Energy Saving Recommendations...**")
+                          with st.spinner("Contacting Azure OpenAI..."):
+                              recommendations_with_savings, total_script_saving_joules, total_script_saving_percent = get_openai_recommendations(source_code, features_dict, prediction)
+  
+                          st.markdown("**Recommendations:**")
+                          if recommendations_with_savings:
+                              for recommendation, percentage, saving in recommendations_with_savings:
+                                  st.markdown(f"- {recommendation.strip()} **(Estimated Saving:** {percentage if percentage != 'N/A' else 'N/A'}**, Saved:** {saving})")
+  
+                          if total_script_saving_joules > 0:
+                              st.info(f"**Estimated Potential Saving (Individual Recommendations):** {total_script_saving_joules:.2f} joules")
+                              st.session_state['potential_total_savings_joules'] = st.session_state.get('potential_total_savings_joules', 0) + total_script_saving_joules
+  
+                          if total_script_saving_percent is not None:
+                              estimated_total_saving_joules_from_percent = prediction * (total_script_saving_percent / 100.0)
+                              st.info(f"**Estimated Total Potential Saving (Overall AI Estimate):** {estimated_total_saving_joules_from_percent:.2f} joules (based on AI's overall estimate of {total_script_saving_percent:.0f}%).")
+                              st.session_state['potential_total_savings_overall'] = st.session_state.get('potential_total_savings_overall', 0) + estimated_total_saving_joules_from_percent
+                          else:
+                              st.info("No overall percentage-based energy saving estimate found from the AI.")
+  
+                      st.divider() # Add divider between files
+  
+              # Update session state for summary tab
+              st.session_state['total_scripts_analyzed'] = total_scripts
+              st.session_state['total_predicted_consumption'] = total_predicted_energy
 # --- Summary Tab ---
 with tab2:
     st.header("Analysis Summary")
     st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
-    st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
-    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
+    total_predicted = st.session_state.get('total_predicted_consumption', 0)
+    st.metric("Total Predicted Energy Consumption", f"{total_predicted:.2f} joules")
+
+    overall_saving_individual = st.session_state.get('potential_total_savings_joules', 0)
+    st.metric("Estimated Total Potential Saving (Sum of Recommendations)", f"{overall_saving_individual:.2f} joules")
+
+    overall_saving_overall = st.session_state.get('potential_total_savings_overall', 0)
+    st.metric("Estimated Total Potential Saving (Based on Overall AI Estimate)", f"{overall_saving_overall:.2f} joules")
+
+    # Optional: Display per-script savings if you still want that
+    if st.session_state.get('potential_total_savings_joules_per_script'):
+        st.subheader("Potential Savings per Script (Sum of Recommendations):")
+        savings_df = pd.DataFrame(list(st.session_state['potential_total_savings_joules_per_script'].items()), columns=['Script', 'Estimated Saving (Joules)'])
+        st.dataframe(savings_df)
