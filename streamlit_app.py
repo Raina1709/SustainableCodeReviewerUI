@@ -445,19 +445,19 @@ with tab1:
                         total_predicted_energy += prediction
                         total_scripts += 1
 
-                          # Get OpenAI Recommendations (Modified to return total saving)
-                          st.write("💡 **Fetching Energy Saving Recommendations...**")
-                          with st.spinner("Contacting Azure OpenAI..."):
-                              recommendations, total_script_saving = get_openai_recommendations(source_code, features_dict)
-  
-                          st.markdown("**Recommendations:**")
-                          st.markdown(recommendations) # Display recommendations using markdown
-  
-                          if total_script_saving > 0:
-                              st.info(f"**Estimated Potential Saving for this script:** {total_script_saving:.2f} joules")
-                              st.session_state['potential_total_savings'] += total_script_saving
-                          else:
-                              st.info("No quantifiable energy savings could be estimated for this script based on the recommendations.")
+                        # Get OpenAI Recommendations (Modified to return total saving)
+                        st.write("💡 **Fetching Energy Saving Recommendations...**")
+                        with st.spinner("Contacting Azure OpenAI..."):
+                            recommendations, total_script_saving = get_openai_recommendations(source_code, features_dict)
+
+                        st.markdown("**Recommendations:**")
+                        st.markdown(recommendations) # Display recommendations using markdown
+
+                        if total_script_saving > 0:
+                            st.info(f"**Estimated Potential Saving for this script:** {total_script_saving:.2f} joules")
+                            st.session_state['potential_total_savings'] += total_script_saving
+                        else:
+                            st.info("No quantifiable energy savings could be estimated for this script based on the recommendations.")
 
                     st.divider() # Add divider between files
 
