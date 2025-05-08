@@ -150,7 +150,7 @@ def get_openai_recommendations(source_code, features_dict):
         - Concurrency/Parallelism (potential benefits or overhead)
         - Memory usage patterns
 
-        Provide specific, actionable recommendations on how to modify the code to reduce energy consumption. Focus on practical changes and explain the reasoning. Structure recommendations clearly, using bullet points.
+        Provide specific, actionable recommendations on how to modify the code to reduce energy consumption. Focus on practical changes and explain the reasoning. Structure recommendations clearly, perhaps using bullet points.
 
         Code Features:
         {features_str}
@@ -160,9 +160,9 @@ def get_openai_recommendations(source_code, features_dict):
         {source_code}
         Recommendations:
 
-        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**.
+        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
 
-        At the end. give the value of **Total Estimated Saving**. Example: Total Estimated Saving : 20-25%
+        At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
         """}
         ]
 
@@ -186,7 +186,7 @@ def get_openai_recommendations(source_code, features_dict):
                 recommendations = "AI model returned an empty recommendation."
             else:
                 # Try to find percentage savings in the recommendations
-                savings_matches = re.findall(r"\(Total Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
+                savings_matches = re.findall(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
                 if savings_matches:
                     # Take the higher end of the first found range as a rough estimate
                     try:
