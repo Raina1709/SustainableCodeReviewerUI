@@ -1,6 +1,3 @@
-# streamlit_app.py (v7 - Added Rough Estimated Savings)
-# UI for Python Script Energy Consumption Prediction + Recommendations
-
 import streamlit as st
 import pandas as pd
 import joblib
@@ -106,18 +103,18 @@ def predict_for_features(model, features_dict):
         st.error(f"Error during prediction step: {e}")
         return None
 
-# --- Azure OpenAI Function (Modified to Extract Percentage) ---
+# --- Azure OpenAI Function (Modified to Extract Percentage and Total Savings) ---
 # @st.cache_data # Optionally cache OpenAI responses for a short time
-def get_openai_recommendations(source_code, features_dict):
+def get_openai_recommendations(source_code, features_dict, predicted_energy):
     """Sends code and features to Azure OpenAI for recommendations and tries to extract savings."""
-    recommendations = "Could not retrieve recommendations." # Default message
-    potential_savings_percent = 0.0
+    recommendations_with_savings = []
+    total_estimated_saving_for_script = 0.0
     try:
         # --- IMPORTANT: Configure Credentials ---
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
-            return "Credentials configuration missing.", potential_savings_percent
+            return "Credentials configuration missing.", 0.0
 
         api_key = st.secrets["AZURE_OPENAI_API_KEY"]
         azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -126,8 +123,7 @@ def get_openai_recommendations(source_code, features_dict):
 
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
             st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
-            return "Credentials configuration incomplete.", potential_savings_percent
-
+            return "Credentials configuration incomplete.", 0.0
 
         client = AzureOpenAI(
             api_key=api_key,
@@ -158,11 +154,11 @@ def get_openai_recommendations(source_code, features_dict):
         Source Code:
         ```python
         {source_code}
-        Recommendations:
+        ```
 
-        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
+        For each recommendation, please also provide a rough **estimated percentage improvement in energy efficiency** if the recommendation is implemented, in the following format: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
 
-        At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
+        Finally, at the very end, calculate and state the **total estimated energy saved in joules** for this script if all the percentage-based recommendations are implemented (use the higher end of the percentage range if provided, or the single value). If no percentage savings are provided, state that the total estimated saving cannot be determined.
         """}
         ]
 
@@ -181,36 +177,57 @@ def get_openai_recommendations(source_code, features_dict):
 
         # --- Extract Response and Attempt to Parse Savings ---
         if response.choices:
-            recommendations = response.choices[0].message.content.strip()
-            if not recommendations: # Handle empty response case
-                recommendations = "AI model returned an empty recommendation."
+            full_response = response.choices[0].message.content.strip()
+            if not full_response: # Handle empty response case
+                return "AI model returned an empty recommendation.", 0.0
             else:
-                # Try to find percentage savings in the recommendations
-                savings_matches = re.findall(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", recommendations)
-                if savings_matches:
-                    # Take the higher end of the first found range as a rough estimate
-                    try:
-                        if savings_matches[0][1]:
-                            potential_savings_percent = float(savings_matches[0][1])
+                recommendation_blocks = full_response.split("\n\n") # Split into potential recommendations
+
+                for block in recommendation_blocks:
+                    saving_match = re.search(r"\(Estimated Saving: (\d+\.?\d*)-?(\d*\.?\d*)?%?\)", block)
+                    recommendation_text = block.split("(")[0].strip() # Extract text before saving info
+                    estimated_saving_percent = None
+
+                    if saving_match:
+                        lower_bound = float(saving_match.group(1))
+                        upper_bound = saving_match.group(2)
+                        if upper_bound:
+                            estimated_saving_percent = float(upper_bound)
                         else:
-                            potential_savings_percent = float(savings_matches[0][0])
-                    except ValueError:
-                        potential_savings_percent = 0.0
+                            estimated_saving_percent = lower_bound
+
+                    if estimated_saving_percent is not None and predicted_energy is not None:
+                        saving_joules = predicted_energy * (estimated_saving_percent / 100.0)
+                        total_estimated_saving_for_script += saving_joules
+                        recommendations_with_savings.append((recommendation_text, f"{estimated_saving_percent:.0f}%", f"{saving_joules:.2f} joules"))
+                    else:
+                        recommendations_with_savings.append((recommendation_text, "N/A", "N/A"))
+
+                # Extract the final total saving statement if present
+                total_saving_match_text = re.search(r"Total estimated energy saved: (.+)", full_response, re.IGNORECASE)
+                if total_saving_match_text:
+                    try:
+                        extracted_total_saving = float(re.search(r"(\d+\.?\d*)", total_saving_match_text.group(1)).group(1))
+                        if abs(extracted_total_saving - total_estimated_saving_for_script) > 0.01: # Basic sanity check
+                            st.warning(f"AI provided a total saving of {extracted_total_saving:.2f} joules, which differs from the calculated sum of {total_estimated_saving_for_script:.2f} joules.")
+                    except:
+                        pass # Ignore if extraction fails
+
         else:
-            recommendations = "No recommendations received from API (response structure unexpected)."
+            return "No recommendations received from API (response structure unexpected).", 0.0
 
     except ImportError:
         st.error("The 'openai' library is not installed. Please add it to requirements.txt and reinstall.")
-        recommendations = "OpenAI library not found."
+        return "OpenAI library not found.", 0.0
     except KeyError as e:
         # This catches cases where a secret isn't defined in secrets.toml
         st.error(f"Azure OpenAI credential '{e}' not found in Streamlit Secrets (secrets.toml).")
-        recommendations = f"Credential configuration missing: {e}"
+        return f"Credential configuration missing: {e}", 0.0
     except Exception as e:
         st.error(f"Error calling Azure OpenAI API: {e}")
-        recommendations = f"Error fetching recommendations: {e}"
+        return f"Error fetching recommendations: {e}", 0.0
 
-    return recommendations, potential_savings_percent
+    return recommendations_with_savings, total_estimated_saving_for_script
 
 #--- Streamlit UI ---
 st.set_page_config(layout="wide")
@@ -238,7 +255,7 @@ if 'total_scripts_analyzed' not in st.session_state:
 if 'total_predicted_consumption' not in st.session_state:
     st.session_state['total_predicted_consumption'] = 0
 if 'potential_total_savings' not in st.session_state:
-    st.session_state['potential_total_savings'] = 0
+    st.session_state['potential_total_savings'] = {} # Dictionary to store savings per script
 
 # --- Tabs ---
 tab1, tab2 = st.tabs(["Analyze Code", "Summary"])
@@ -265,75 +282,75 @@ with tab1:
     if analyze_button:
     # Check if input is a GitHub URL
         if input_path_or_url.startswith(('http://', 'https://')) and 'github.com' in input_path_or_url:
-                scan_source_description = f"GitHub source: {input_path_or_url}"
-                st.info(f"Processing {scan_source_description}")
+            scan_source_description = f"GitHub source: {input_path_or_url}"
+            st.info(f"Processing {scan_source_description}")
 
-                # --- Improved URL Parsing ---
-                match = re.match(r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/(.*))?)?", input_path_or_url)
-                if not match:
-                    st.error("Could not parse GitHub URL structure. Please provide URL to repo root or subdirectory.")
-                    st.stop()
-                user, repo, branch, _, subdir = match.groups()
-                repo = repo.replace(".git", "")
-                target_subdir_in_repo = subdir.strip('/') if subdir else None
-                repo_url_base = f"https://github.com/{user}/{repo}"
-                st.write(f"Detected Repository Base: {repo_url_base}")
-                if target_subdir_in_repo: st.write(f"Detected Target Subdirectory: {target_subdir_in_repo}")
-                # --- End Improved URL Parsing ---
+            # --- Improved URL Parsing ---
+            match = re.match(r"https?://github\.com/([^/]+)/([^/]+)(?:/tree/([^/]+)(/(.*))?)?", input_path_or_url)
+            if not match:
+                st.error("Could not parse GitHub URL structure. Please provide URL to repo root or subdirectory.")
+                st.stop()
+            user, repo, branch, _, subdir = match.groups()
+            repo = repo.replace(".git", "")
+            target_subdir_in_repo = subdir.strip('/') if subdir else None
+            repo_url_base = f"https://github.com/{user}/{repo}"
+            st.write(f"Detected Repository Base: {repo_url_base}")
+            if target_subdir_in_repo: st.write(f"Detected Target Subdirectory: {target_subdir_in_repo}")
+            # --- End Improved URL Parsing ---
 
-                # Attempt download using common branches (use specified branch first if available)
-                potential_branches = [branch] if branch else ['main', 'master']
-                repo_zip_content = None
-                for b in potential_branches:
-                    potential_zip_url = f"{repo_url_base}/archive/refs/heads/{b}.zip"
-                    st.write(f"Attempting to download zip from branch: {b}...")
-                    try:
-                        response = requests.get(potential_zip_url, stream=True, timeout=30)
-                        response.raise_for_status()
-                        repo_zip_content = response.content
-                        st.write(f"Successfully downloaded zip for branch: {b}")
-                        break
-                    except requests.exceptions.RequestException as e:
-                        st.write(f"Could not download zip for branch '{b}': {e}")
-                    except Exception as e:
-                        st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
-
-                if not repo_zip_content:
-                    st.error("Could not download repository zip. Check URL or repo structure (e.g., branch name).")
-                    st.stop()
-
-                # Extract to temporary directory
+            # Attempt download using common branches (use specified branch first if available)
+            potential_branches = [branch] if branch else ['main', 'master']
+            repo_zip_content = None
+            for b in potential_branches:
+                potential_zip_url = f"{repo_url_base}/archive/refs/heads/{b}.zip"
+                st.write(f"Attempting to download zip from branch: {b}...")
                 try:
-                    temp_dir_context = tempfile.TemporaryDirectory()
-                    temp_dir = temp_dir_context.name
-                    st.write(f"Extracting repository to temporary location...")
-                    with zipfile.ZipFile(io.BytesIO(repo_zip_content)) as zf:
-                        zf.extractall(temp_dir)
-                        zip_root_folder = zf.namelist()[0].split('/')[0] # e.g., 'repo-main'
-                        extracted_repo_root = os.path.join(temp_dir, zip_root_folder)
-                    st.write("Extraction complete.")
-
-                    # Determine the starting path for os.walk
-                    scan_start_path = extracted_repo_root
-                    base_path_for_relative = extracted_repo_root # For display
-                    if target_subdir_in_repo:
-                        potential_subdir_path = os.path.join(extracted_repo_root, target_subdir_in_repo.replace('%20', ' '))
-                        if os.path.isdir(potential_subdir_path):
-                            scan_start_path = potential_subdir_path
-                            base_path_for_relative = scan_start_path # Make path relative to subdir
-                            st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
-                        else:
-                            st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
-
-                    # Find Python files starting from the scan_start_path
-                    for root, dirs, files in os.walk(scan_start_path):
-                        dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
-                        for file in files:
-                            if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
-
+                    response = requests.get(potential_zip_url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    repo_zip_content = response.content
+                    st.write(f"Successfully downloaded zip for branch: {b}")
+                    break
+                except requests.exceptions.RequestException as e:
+                    st.write(f"Could not download zip for branch '{b}': {e}")
                 except Exception as e:
-                    st.error(f"Error during zip extraction or file scanning: {e}")
-                    if temp_dir_context: temp_dir_context.cleanup()
+                    st.write(f"An unexpected error occurred downloading branch '{b}': {e}")
+
+            if not repo_zip_content:
+                st.error("Could not download repository zip. Check URL or repo structure (e.g., branch name).")
+                st.stop()
+
+            # Extract to temporary directory
+            try:
+                temp_dir_context = tempfile.TemporaryDirectory()
+                temp_dir = temp_dir_context.name
+                st.write(f"Extracting repository to temporary location...")
+                with zipfile.ZipFile(io.BytesIO(repo_zip_content)) as zf:
+                    zf.extractall(temp_dir)
+                    zip_root_folder = zf.namelist()[0].split('/')[0] # e.g., 'repo-main'
+                    extracted_repo_root = os.path.join(temp_dir, zip_root_folder)
+                st.write("Extraction complete.")
+
+                # Determine the starting path for os.walk
+                scan_start_path = extracted_repo_root
+                base_path_for_relative = extracted_repo_root # For display
+                if target_subdir_in_repo:
+                    potential_subdir_path = os.path.join(extracted_repo_root, target_subdir_in_repo.replace('%20', ' '))
+                    if os.path.isdir(potential_subdir_path):
+                        scan_start_path = potential_subdir_path
+                        base_path_for_relative = scan_start_path # Make path relative to subdir
+                        st.write(f"Scanning specifically within subdirectory: {target_subdir_in_repo}")
+                    else:
+                        st.warning(f"Subdirectory '{target_subdir_in_repo}' not found in extracted repo. Scanning entire repository.")
+
+                # Find Python files starting from the scan_start_path
+                for root, dirs, files in os.walk(scan_start_path):
+                    dirs[:] = [d for d in dirs if d not in ['venv', '.venv', 'env', '.env', '__pycache__', '.git']]
+                    for file in files:
+                        if file.endswith(".py"): files_to_process.append(os.path.join(root, file))
+
+            except Exception as e:
+                st.error(f"Error during zip extraction or file scanning: {e}")
+                if temp_dir_context: temp_dir_context.cleanup()
 
         elif os.path.exists(input_path_or_url):
             with st.spinner("Accessing source and finding Python files..."):
@@ -362,7 +379,7 @@ with tab1:
             st.warning("No Python files found to process.")
         else:
             total_predicted_energy = 0
-            total_potential_savings = 0
+            overall_potential_savings = {} # Store total potential saving per script
             total_scripts = 0
 
             with results_placeholder:
@@ -392,24 +409,29 @@ with tab1:
                             total_predicted_energy += prediction
                             total_scripts += 1
 
-                            # Get OpenAI Recommendations (Modified to return savings percent)
+                            # Get OpenAI Recommendations (Modified to return savings with details)
                             st.write("💡 **Fetching Energy Saving Recommendations...**")
                             with st.spinner("Contacting Azure OpenAI..."):
-                                recommendations, savings_percent = get_openai_recommendations(source_code, features_dict)
-                            st.markdown("**Recommendations:**")
-                            st.markdown(recommendations) # Display recommendations using markdown
+                                recommendations_with_savings, total_script_saving = get_openai_recommendations(source_code, features_dict, prediction)
 
-                            if savings_percent > 0:
-                                estimated_saving = prediction * (savings_percent / 100.0)
-                                st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
-                                total_potential_savings += estimated_saving
+                            st.markdown("**Recommendations:**")
+                            if recommendations_with_savings:
+                                for recommendation, percentage, saving in recommendations_with_savings:
+                                    st.markdown(f"- {recommendation.strip()} **(Estimated Saving:** {percentage if percentage != 'N/A' else 'N/A'}**, Saved:** {saving})")
+                                if total_script_saving > 0:
+                                    st.info(f"**Total Estimated Potential Saving for this script:** {total_script_saving:.2f} joules")
+                                    overall_potential_savings[display_path] = total_script_saving
+                                else:
+                                    st.info("No quantifiable energy savings could be estimated for this script based on the recommendations.")
+                            else:
+                                st.markdown("No specific recommendations for energy saving were found.")
 
                     st.divider() # Add divider between files
 
             # Update session state for summary tab
             st.session_state['total_scripts_analyzed'] = total_scripts
             st.session_state['total_predicted_consumption'] = total_predicted_energy
-            st.session_state['potential_total_savings'] = total_potential_savings
+            st.session_state['potential_total_savings'] = overall_potential_savings
 
             if total_scripts > 0:
                 st.info(f"Analysis completed for {total_scripts} Python scripts.")
@@ -428,5 +450,15 @@ with tab1:
 with tab2:
     st.header("Analysis Summary")
     st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
-    st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
-    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
+    total_predicted = st.session_state.get('total_predicted_consumption', 0)
+    st.metric("Total Predicted Energy Consumption", f"{total_predicted:.2f} joules")
+
+    overall_saving_sum = sum(st.session_state.get('potential_total_savings', {}).values())
+    st.metric("Estimated Total Potential Saving (All Scripts)", f"{overall_saving_sum:.2f} joules")
+
+    if st.session_state.get('potential_total_savings'):
+        st.subheader("Potential Savings per Script:")
+        savings_df = pd.DataFrame(list(st.session_state['potential_total_savings'].items()), columns=['Script', 'Estimated Saving (Joules)'])
+        st.dataframe(savings_df)
+    else:
+        st.info("No potential savings could be calculated across the analyzed scripts.")
