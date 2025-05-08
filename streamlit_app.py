@@ -1,3 +1,6 @@
+# streamlit_app.py (v7 - Added Rough Estimated Savings)
+# UI for Python Script Energy Consumption Prediction + Recommendations
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -108,13 +111,13 @@ def predict_for_features(model, features_dict):
 def get_openai_recommendations(source_code, features_dict):
     """Sends code and features to Azure OpenAI for recommendations and tries to extract savings."""
     recommendations = "Could not retrieve recommendations." # Default message
-    total_estimated_saving_for_script = 0.0
+    potential_savings_percent = 0.0
     try:
         # --- IMPORTANT: Configure Credentials ---
         if not all(k in st.secrets for k in ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT_NAME"]):
             st.error("Azure OpenAI credentials missing in Streamlit Secrets (secrets.toml).")
             st.info("Please ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_DEPLOYMENT_NAME are set in .streamlit/secrets.toml")
-            return "Credentials configuration missing.", 0.0
+            return "Credentials configuration missing.", potential_savings_percent
 
         api_key = st.secrets["AZURE_OPENAI_API_KEY"]
         azure_endpoint = st.secrets["AZURE_OPENAI_ENDPOINT"]
@@ -123,7 +126,8 @@ def get_openai_recommendations(source_code, features_dict):
 
         if not all([api_key, azure_endpoint, api_version, deployment_name]):
             st.error("One or more Azure OpenAI credentials in Streamlit Secrets are empty.")
-            return "Credentials configuration incomplete.", 0.0
+            return "Credentials configuration incomplete.", potential_savings_percent
+
 
         client = AzureOpenAI(
             api_key=api_key,
@@ -154,71 +158,14 @@ def get_openai_recommendations(source_code, features_dict):
         Source Code:
         ```python
         {source_code}
-        ```
+        Recommendations:
 
-        For each recommendation, if you can estimate the total energy saved in joules if the recommendation is implemented, please state it clearly at the end of the recommendation in the following format: **Total Energy Saved: X joules**.
+        Also give the **estimated percentage improvement in energy efficiency** for each recommendation, if possible, in the following format at the end of each recommendation: **(Estimated Saving: X-Y%)**. If a percentage cannot be estimated, please omit it.
 
-        At the very end, give the value of the total energy saved in joules for this script if all quantifiable recommendations are implemented. Example: Total Energy Saved for Script: 25.5 joules
+        At the end. give the value of total enery saved in joules. Example: Total Enery Saved : 21 joules
         """}
         ]
 
-        # --- Make API Call ---
-        st.write("_Contacting Azure OpenAI... (This may take a moment)_") # Give user feedback
-        response = client.chat.completions.create(
-            model=deployment_name, # Your deployment name
-            messages=prompt_messages,
-            temperature=0.5, # Lower temperature for more focused recommendations
-            max_tokens=4000, # Increased slightly for potentially longer recommendations
-            top_p=0.95,
-            frequency_penalty=0,
-            presence_penalty=0,
-            stop=None
-        )
-
-        # --- Extract Response and Attempt to Parse Savings ---
-        if response.choices:
-            full_response = response.choices[0].message.content.strip()
-            if not full_response: # Handle empty response case
-                return "AI model returned an empty recommendation.", 0.0
-            else:
-                recommendation_blocks = full_response.split("\n\n") # Split into potential recommendations
-                for block in recommendation_blocks:
-                    saving_match = re.search(r"Total Energy Saved: (\d+\.?\d*) joules", block, re.IGNORECASE)
-                    if saving_match:
-                        try:
-                            total_estimated_saving_for_script += float(saving_match.group(1))
-                        except ValueError:
-                            st.warning(f"Could not parse energy saving value from recommendation: {block}")
-
-                # Extract the final total saving for the script if provided
-                final_saving_match = re.search(r"Total Energy Saved for Script: (\d+\.?\d*) joules", full_response, re.IGNORECASE)
-                if final_saving_match:
-                    try:
-                        extracted_total = float(final_saving_match.group(1))
-                        # Basic sanity check - if the AI provides a total, we might prefer that
-                        if abs(extracted_total - total_estimated_saving_for_script) > 0.01:
-                            st.info(f"AI provided a total script saving of {extracted_total:.2f} joules.")
-                            total_estimated_saving_for_script = extracted_total
-                    except ValueError:
-                        st.warning("Could not parse the final total energy saved value from the AI.")
-
-                recommendations = full_response # Keep the full response for display
-
-        else:
-            recommendations = "No recommendations received from API (response structure unexpected)."
-
-    except ImportError:
-        st.error("The 'openai' library is not installed. Please add it to requirements.txt and reinstall.")
-        recommendations = "OpenAI library not found."
-    except KeyError as e:
-        # This catches cases where a secret isn't defined in secrets.toml
-        st.error(f"Azure OpenAI credential '{e}' not found in Streamlit Secrets (secrets.toml).")
-        recommendations = f"Credential configuration missing: {e}"
-    except Exception as e:
-        st.error(f"Error calling Azure OpenAI API: {e}")
-        recommendations = f"Error fetching recommendations: {e}"
-
-    return recommendations, total_estimated_saving_for_script
         # --- Make API Call ---
         st.write("_Contacting Azure OpenAI... (This may take a moment)_") # Give user feedback
         response = client.chat.completions.create(
@@ -266,7 +213,7 @@ def get_openai_recommendations(source_code, features_dict):
     return recommendations, potential_savings_percent
 
 #--- Streamlit UI ---
-st.set_page_config(layout="wide", page_title = "Sustainable Code Review Assistant")
+st.set_page_config(layout="wide", page_title="Sustainable Code Review Assistant")
 st.title("🐍 Sustainable Code Review Assistant")
 
 @st.cache_resource # Cache the loaded model
@@ -441,23 +388,21 @@ with tab1:
                         prediction = predict_for_features(loaded_model, features_dict) # Handles its own errors via st.error
 
                         if prediction is not None:
-                        st.success(f"**Predicted Energy: {prediction:.2f} joules**")
-                        total_predicted_energy += prediction
-                        total_scripts += 1
+                            st.success(f"**Predicted Energy: {prediction:.2f} joules**")
+                            total_predicted_energy += prediction
+                            total_scripts += 1
 
-                        # Get OpenAI Recommendations (Modified to return total saving)
-                        st.write("💡 **Fetching Energy Saving Recommendations...**")
-                        with st.spinner("Contacting Azure OpenAI..."):
-                            recommendations, total_script_saving = get_openai_recommendations(source_code, features_dict)
+                            # Get OpenAI Recommendations (Modified to return savings percent)
+                            st.write("💡 **Fetching Energy Saving Recommendations...**")
+                            with st.spinner("Contacting Azure OpenAI..."):
+                                recommendations, savings_percent = get_openai_recommendations(source_code, features_dict)
+                            st.markdown("**Recommendations:**")
+                            st.markdown(recommendations) # Display recommendations using markdown
 
-                        st.markdown("**Recommendations:**")
-                        st.markdown(recommendations) # Display recommendations using markdown
-
-                        if total_script_saving > 0:
-                            st.info(f"**Estimated Potential Saving for this script:** {total_script_saving:.2f} joules")
-                            st.session_state['potential_total_savings'] += total_script_saving
-                        else:
-                            st.info("No quantifiable energy savings could be estimated for this script based on the recommendations.")
+                            if savings_percent > 0:
+                                estimated_saving = prediction * (savings_percent / 100.0)
+                                st.info(f"**Estimated Potential Saving:** {estimated_saving:.2f} joules (based on AI recommendation of up to {savings_percent:.0f}% improvement)")
+                                total_potential_savings += estimated_saving
 
                     st.divider() # Add divider between files
 
