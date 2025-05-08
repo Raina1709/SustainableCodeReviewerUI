@@ -461,7 +461,20 @@ with tab1:
 # --- Summary Tab ---
 with tab2:
     st.header("Analysis Summary")
-    st.metric("Total Scripts Analyzed", st.session_state.get('total_scripts_analyzed', 0))
-    st.metric("Total Predicted Energy Consumption", f"{st.session_state.get('total_predicted_consumption', 0):.2f} joules")
-    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{st.session_state.get('potential_total_savings', 0):.2f} joules")
-    st.metric("Improvement in Efficiency", st.session_state.get('(potential_total_savings/total_predicted_consumption) * 100', 0), "%")
+
+    # Retrieve values from session state
+    total_scripts_analyzed = st.session_state.get('total_scripts_analyzed', 0)
+    total_predicted_consumption = st.session_state.get('total_predicted_consumption', 0.0)
+    potential_total_savings = st.session_state.get('potential_total_savings', 0.0)
+
+    # Display the first three metrics
+    st.metric("Total Scripts Analyzed", total_scripts_analyzed)
+    st.metric("Total Predicted Energy Consumption", f"{total_predicted_consumption:.2f} joules")
+    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{potential_total_savings:.2f} joules")
+
+    # Calculate Improvement in Efficiency
+    improvement_percentage = 0.0  # Default to 0
+    if total_predicted_consumption > 0:  # Avoid division by zero
+        improvement_percentage = (potential_total_savings / total_predicted_consumption) * 100
+
+    st.metric("Improvement in Efficiency", f"{improvement_percentage:.1f}%") 
