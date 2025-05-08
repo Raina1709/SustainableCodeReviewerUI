@@ -469,8 +469,8 @@ with tab2:
 
     # Display the first three metrics
     st.metric("Total Scripts Analyzed", total_scripts_analyzed)
-    st.metric("Total Predicted Energy Consumption", f"{total_predicted_consumption:.2f} joules")
-    st.metric("Estimated Total Potential Saving (Based on Recommendations)", f"{potential_total_savings:.2f} joules")
+    st.metric("Total Predicted Energy Consumption (On single execution)", f"{total_predicted_consumption:.2f} joules")
+    st.metric("Estimated Total Potential Saving", f"{potential_total_savings:.2f} joules")
 
     # Calculate Improvement in Efficiency
     improvement_percentage = 0.0  # Default to 0
