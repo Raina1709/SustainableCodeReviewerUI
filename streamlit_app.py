@@ -522,7 +522,6 @@ with tab2:
                     <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_bulbs}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                )
 
         else:
             st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
