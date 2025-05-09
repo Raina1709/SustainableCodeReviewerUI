@@ -511,12 +511,12 @@ with tab2:
             num_bulbs_for_one_hour = total_bulb_hours_equivalent
             num_hours_for_one_bulb = total_bulb_hours_equivalent
 
-            col1, col2 = st.columns(2)
+            col1 = st.columns(1)
             with col1:
-                st.metric(
-                    label="Powering 12W CFL Bulbs (for 1 hour each)",
-                    value=f"{num_bulbs_for_one_hour:.1f} bulbs",
-                    st.markdown(f"""
+                # --- Display "Powering 12W CFL Bulbs" with GREEN value ---
+                label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
+                value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
+                st.markdown(f"""
                 <div style="margin-bottom: 0.5rem;">
                     <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem;">{label_bulbs}</div>
                     <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_bulbs}</div>
