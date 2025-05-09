@@ -496,7 +496,7 @@ with tab2:
         st.subheader("Projected Daily Impact")
 
         if potential_total_savings_single_run > 0:
-            EXECUTIONS_PER_DAY = 500
+            EXECUTIONS_PER_DAY = 20000
             estimated_daily_savings_joules = potential_total_savings_single_run * EXECUTIONS_PER_DAY
             st.metric("Estimated Daily Savings (on 500 executions)", f"{estimated_daily_savings_joules:,.2f} joules")
 
