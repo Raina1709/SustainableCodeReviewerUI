@@ -13,6 +13,7 @@ import io
 import tempfile
 import shutil
 import re
+import base64
 from openai import AzureOpenAI # Import Azure OpenAI client
 
 # --- Configuration ---
