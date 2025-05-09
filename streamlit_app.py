@@ -498,7 +498,7 @@ with tab2:
         if potential_total_savings_single_run > 0:
             EXECUTIONS_PER_DAY = 20000
             estimated_daily_savings_joules = potential_total_savings_single_run * EXECUTIONS_PER_DAY
-            st.metric("Estimated Daily Savings (on 500 executions)", f"{estimated_daily_savings_joules:,.2f} joules")
+            st.metric("Estimated Daily Savings", f"{estimated_daily_savings_joules:,.2f} joules")
 
             ENERGY_PER_12W_CFL_HOUR_JOULES = 43200.0
 
