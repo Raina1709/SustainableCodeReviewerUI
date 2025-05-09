@@ -467,11 +467,10 @@ with tab2:
     total_predicted_consumption_single_run = st.session_state.get('total_predicted_consumption', 0.0)
     potential_total_savings_single_run = st.session_state.get('potential_total_savings', 0.0)
 
-    # Display the first two original metrics as standard st.metric
+    # Display the standard metrics
     st.metric("Total Scripts Analyzed", total_scripts_analyzed)
     st.metric("Total Predicted Energy Consumption (per single combined execution)", f"{total_predicted_consumption_single_run:.2f} joules")
     st.metric("Estimated Total Potential Saving (per single combined execution)", f"{potential_total_savings_single_run:.2f} joules")
-
 
     # Calculate Improvement in Efficiency based on single run
     improvement_percentage_single_run = 0.0
@@ -479,15 +478,18 @@ with tab2:
         improvement_percentage_single_run = (potential_total_savings_single_run / total_predicted_consumption_single_run) * 100
 
     # --- Display "Improvement in Efficiency" with GREEN value ---
+    # Style designed to mimic st.metric:
+    # Label: Smaller, dimmer color (e.g., Streamlit's secondary text color)
+    # Value: Larger, bolder, and in this case, green.
     label_improvement = "Improvement in Efficiency (for single execution)"
     value_improvement = f"{improvement_percentage_single_run:.1f}%"
     st.markdown(f"""
-    <div style="margin-top: 1rem; margin-bottom: 0.5rem;"> <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem;">{label_improvement}</div>
-        <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_improvement}</div>
+    <div style="margin-top: 1rem; margin-bottom: 0.5rem;"> <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
+        <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit;">{value_improvement}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.divider() # Add a visual separator
+    st.divider()
 
     st.subheader("Projected Daily Impact (Based on 500 executions/day)")
 
@@ -506,32 +508,28 @@ with tab2:
                 f"This estimated daily saving of **{estimated_daily_savings_joules:,.2f} joules** is equivalent to:"
             )
 
+            # This value is used for the "bulbs for 1 hour" metric and the subsequent text
             num_bulbs_for_one_hour = total_bulb_hours_equivalent
-            num_hours_for_one_bulb = total_bulb_hours_equivalent
 
-            col1, col2 = st.columns(2)
-            with col1:
-                # --- Display "Powering 12W CFL Bulbs" with GREEN value ---
-                label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
-                value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
-                st.markdown(f"""
-                <div style="margin-bottom: 0.5rem;">
-                    <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem;">{label_bulbs}</div>
-                    <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_bulbs}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col2:
-                st.metric(
-                    label="Powering One 12W CFL Bulb",
-                    value=f"{num_hours_for_one_bulb:.1f} hours"
-                )
+            # --- Display "Powering 12W CFL Bulbs" with GREEN value (no longer in a column) ---
+            label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
+            value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
+            st.markdown(f"""
+            <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;"> <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
+                <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit;">{value_bulbs}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            if num_hours_for_one_bulb >= 24:
-                num_days_for_one_bulb = num_hours_for_one_bulb / 24
+            # Relatable timeframes based on total_bulb_hours_equivalent
+            if total_bulb_hours_equivalent >= 24:
+                num_days_for_one_bulb = total_bulb_hours_equivalent / 24
                 st.write(f"That's enough to power one 12W CFL bulb continuously for approximately **{num_days_for_one_bulb:.1f} days**.")
-            elif num_hours_for_one_bulb < 1 and num_hours_for_one_bulb > 0:
-                num_minutes_for_one_bulb = num_hours_for_one_bulb * 60
+            elif total_bulb_hours_equivalent < 1 and total_bulb_hours_equivalent > 0:
+                num_minutes_for_one_bulb = total_bulb_hours_equivalent * 60
                 st.write(f"Or, powering one 12W CFL bulb for approximately **{num_minutes_for_one_bulb:.0f} minutes**.")
+            # If total_bulb_hours_equivalent is between 1 and 24, the "X bulbs for 1 hour" and the st.write below it will cover it.
+            # Or, if it's exactly 0, nothing extra is printed here.
+
         else:
             st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
     else:
