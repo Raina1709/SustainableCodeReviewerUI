@@ -477,6 +477,11 @@ with tab2:
     if total_predicted_consumption_single_run > 0:
         improvement_percentage_single_run = (potential_total_savings_single_run / total_predicted_consumption_single_run) * 100
     st.metric("Improvement in Efficiency (for single execution)", f"{improvement_percentage_single_run:.1f}%")
+    st.markdown(f"""
+    <div style="margin-top: 1rem; margin-bottom: 0.5rem;"> <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem;">{label_improvement}</div>
+        <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_improvement}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider() # Add a visual separator
 
@@ -511,6 +516,12 @@ with tab2:
                 st.metric(
                     label="Powering 12W CFL Bulbs (for 1 hour each)",
                     value=f"{num_bulbs_for_one_hour:.1f} bulbs"
+                    st.markdown(f"""
+                <div style="margin-bottom: 0.5rem;">
+                    <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem;">{label_bulbs}</div>
+                    <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem;">{value_bulbs}</div>
+                </div>
+                """, unsafe_allow_html=True)
                 )
 
         else:
