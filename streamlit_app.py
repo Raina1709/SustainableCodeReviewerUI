@@ -545,7 +545,7 @@ with tab2:
                     contents = f.read()
                 data_url = base64.b64encode(contents).decode("utf-8")
                 st.markdown(
-                    f'<div style="display: flex; justify-content: flex-start; align-items: flex-start; height: 100%; padding-top: 20px; margin-left: -200px;">' # Changed justify-content and added margin-left
+                    f'<div style="display: flex; justify-content: flex-start; align-items: flex-start; height: 100%; padding-top: 20px; margin-left: -1000px;">' # Changed justify-content and added margin-left
                     f'<img src="data:image/gif;base64,{data_url}" alt="Bulb animation" style="max-width: 100%; width: {image_width}px;">'
                     f'</div>',
                     unsafe_allow_html=True,
