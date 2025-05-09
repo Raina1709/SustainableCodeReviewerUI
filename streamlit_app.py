@@ -282,7 +282,7 @@ tab1, tab2 = st.tabs(["Analyze Code", "Summary"])
 with tab1:
     st.header("Input")
     input_path_or_url = st.text_input(
-        "Enter public GitHub repository URL or local file/directory path:",
+        "Enter public GitHub repository URL:",
         placeholder="https://github.com/skills/introduction-to-github"
     )
 
@@ -486,7 +486,7 @@ with tab2:
         value_improvement = f"{improvement_percentage_single_run:.1f}%"
         st.markdown(f"""
         <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
-            <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
+            <div style="font-size: 1.000rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
             <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_improvement}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -516,7 +516,7 @@ with tab2:
                 value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
                 st.markdown(f"""
                 <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
-                    <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
+                    <div style="font-size: 1.000rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
                     <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_bulbs}</div>
                 </div>
                 """, unsafe_allow_html=True)
