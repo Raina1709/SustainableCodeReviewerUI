@@ -512,19 +512,6 @@ with tab2:
                     label="Powering 12W CFL Bulbs (for 1 hour each)",
                     value=f"{num_bulbs_for_one_hour:.1f} bulbs"
                 )
-            with col2:
-                st.metric(
-                    label="Powering One 12W CFL Bulb",
-                    value=f"{num_hours_for_one_bulb:.1f} hours"
-                )
-
-            # Additional relatable metrics if total_bulb_hours is large
-            if num_hours_for_one_bulb >= 24: # If it's at least a day
-                num_days_for_one_bulb = num_hours_for_one_bulb / 24
-                st.write(f"That's enough to power one 12W CFL bulb continuously for approximately **{num_days_for_one_bulb:.1f} days**.")
-            elif num_hours_for_one_bulb < 1 and num_hours_for_one_bulb > 0: # If less than an hour but more than 0
-                num_minutes_for_one_bulb = num_hours_for_one_bulb * 60
-                st.write(f"Or, powering one 12W CFL bulb for approximately **{num_minutes_for_one_bulb:.0f} minutes**.")
 
         else:
             st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
