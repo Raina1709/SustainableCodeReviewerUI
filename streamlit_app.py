@@ -464,17 +464,69 @@ with tab2:
 
     # Retrieve values from session state
     total_scripts_analyzed = st.session_state.get('total_scripts_analyzed', 0)
-    total_predicted_consumption = st.session_state.get('total_predicted_consumption', 0.0)
-    potential_total_savings = st.session_state.get('potential_total_savings', 0.0)
+    total_predicted_consumption_single_run = st.session_state.get('total_predicted_consumption', 0.0)
+    potential_total_savings_single_run = st.session_state.get('potential_total_savings', 0.0)
 
-    # Display the first three metrics
+    # Display the first three original metrics
     st.metric("Total Scripts Analyzed", total_scripts_analyzed)
-    st.metric("Total Predicted Energy Consumption (On single execution)", f"{total_predicted_consumption:.2f} joules")
-    st.metric("Estimated Total Potential Saving", f"{potential_total_savings:.2f} joules")
+    st.metric("Total Predicted Energy Consumption (per single combined execution)", f"{total_predicted_consumption_single_run:.2f} joules")
+    st.metric("Estimated Total Potential Saving (per single combined execution)", f"{potential_total_savings_single_run:.2f} joules")
 
-    # Calculate Improvement in Efficiency
-    improvement_percentage = 0.0  # Default to 0
-    if total_predicted_consumption > 0:  # Avoid division by zero
-        improvement_percentage = (potential_total_savings / total_predicted_consumption) * 100
+    # Calculate Improvement in Efficiency based on single run
+    improvement_percentage_single_run = 0.0
+    if total_predicted_consumption_single_run > 0:
+        improvement_percentage_single_run = (potential_total_savings_single_run / total_predicted_consumption_single_run) * 100
+    st.metric("Improvement in Efficiency (for single execution)", f"{improvement_percentage_single_run:.1f}%")
 
-    st.metric("Improvement in Efficiency", f"{improvement_percentage:.1f}%") 
+    st.divider() # Add a visual separator
+
+    st.subheader("Projected Daily Impact (Based on 500 executions/day)")
+
+    if potential_total_savings_single_run > 0:
+        # --- New Calculation: Estimated savings on multiple executions ---
+        EXECUTIONS_PER_DAY = 500
+        estimated_daily_savings_joules = potential_total_savings_single_run * EXECUTIONS_PER_DAY
+        st.metric("Estimated Daily Savings (on 500 executions)", f"{estimated_daily_savings_joules:,.2f} joules")
+
+        # --- New Calculation: Bulb-hours equivalent ---
+        ENERGY_PER_12W_CFL_HOUR_JOULES = 43200.0  # Energy for one 12W CFL bulb in 1 hour
+
+        if ENERGY_PER_12W_CFL_HOUR_JOULES > 0:
+            # Total bulb-hours this daily saving represents
+            total_bulb_hours_equivalent = estimated_daily_savings_joules / ENERGY_PER_12W_CFL_HOUR_JOULES
+
+            st.markdown("##### Energy Equivalence:")
+            st.write(
+                f"This estimated daily saving of **{estimated_daily_savings_joules:,.2f} joules** is equivalent to:"
+            )
+
+            # X number of bulbs powered for 1 hour
+            # Y number of hours for 1 bulb
+            # Both X and Y will be the same value here, which is total_bulb_hours_equivalent
+            num_bulbs_for_one_hour = total_bulb_hours_equivalent
+            num_hours_for_one_bulb = total_bulb_hours_equivalent
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    label="Powering 12W CFL Bulbs (for 1 hour each)",
+                    value=f"{num_bulbs_for_one_hour:.1f} bulbs"
+                )
+            with col2:
+                st.metric(
+                    label="Powering One 12W CFL Bulb",
+                    value=f"{num_hours_for_one_bulb:.1f} hours"
+                )
+
+            # Additional relatable metrics if total_bulb_hours is large
+            if num_hours_for_one_bulb >= 24: # If it's at least a day
+                num_days_for_one_bulb = num_hours_for_one_bulb / 24
+                st.write(f"That's enough to power one 12W CFL bulb continuously for approximately **{num_days_for_one_bulb:.1f} days**.")
+            elif num_hours_for_one_bulb < 1 and num_hours_for_one_bulb > 0: # If less than an hour but more than 0
+                num_minutes_for_one_bulb = num_hours_for_one_bulb * 60
+                st.write(f"Or, powering one 12W CFL bulb for approximately **{num_minutes_for_one_bulb:.0f} minutes**.")
+
+        else:
+            st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
+    else:
+        st.info("No potential savings identified, so no daily impact or energy equivalence to show.")
