@@ -493,7 +493,7 @@ with tab2:
 
         st.divider()
 
-        st.subheader("Projected Daily Impact (Based on 500 executions/day)")
+        st.subheader("Projected Daily Impact")
 
         if potential_total_savings_single_run > 0:
             EXECUTIONS_PER_DAY = 500
