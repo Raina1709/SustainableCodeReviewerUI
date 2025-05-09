@@ -458,14 +458,12 @@ with tab1:
             except Exception as e:
                 st.warning(f"Could not automatically clean up temp directory. Error: {e}")
 
-# --- Summary Tab ---
 with tab2:
     # Create main columns: one for the summary text, one for the GIF
-    # Adjust the ratio [3, 1] as needed. E.g., [2,1] for a relatively larger GIF area
-    # or [4,1] for a smaller GIF area.
     summary_content_col, image_col = st.columns([3, 1])
 
     with summary_content_col:
+        # ... (all your existing summary content code) ...
         st.header("Analysis Summary")
 
         # Retrieve values from session state
@@ -533,24 +531,34 @@ with tab2:
         else:
             st.info("No potential savings identified, so no daily impact or energy equivalence to show.")
 
+
     # --- Column for the GIF ---
     with image_col:
-        # Add some vertical space if you want to align the GIF differently,
-        # e.g., st.markdown("<br>" * 5, unsafe_allow_html=True) for 5 line breaks
-        # Or align it with a particular section by careful placement.
-        # For now, it will align near the top of the tab content.
+        # Option 1: Local GIF (using base64 encoding for robustness)
+        local_gif_path = "bulb.gif"  # << IMPORTANT: REPLACE THIS if your filename is different <<
+        image_width = 150 # Adjust width as needed
 
-        gif_path_or_url = "bulb.gif"  # << IMPORTANT: REPLACE THIS <<
-        # Option 1: Local GIF (place 'bulb.gif' in the same directory as your script)
-        # gif_path_or_url = "bulb.gif"
+        if os.path.exists(local_gif_path):
+            try:
+                with open(local_gif_path, "rb") as f:
+                    contents = f.read()
+                data_url = base64.b64encode(contents).decode("utf-8")
+                st.markdown(
+                    f'<img src="data:image/gif;base64,{data_url}" alt="Bulb animation" width="{image_width}">',
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                st.error(f"Error embedding local GIF: {e}")
+        else:
+            st.warning(f"Local GIF not found at '{local_gif_path}'. Please check the path and filename.")
 
-        # Option 2: GIF from a URL
-        # gif_path_or_url = "https://media.giphy.com/media/YOUR_GIF_ID/giphy.gif" # Example URL
-
-        try:
-            # Adjust width as needed to fit your layout and GIF aspect ratio
-            st.image(gif_path_or_url, caption="Bright Ideas for Energy Saving!", width=150)
-        except FileNotFoundError: # Specific error for local files
-             st.warning(f"GIF image not found at '{gif_path_or_url}'. Please check the path.")
-        except Exception as e: # Catch other errors (e.g., network issues for URLs, invalid image format)
-            st.error(f"Could not load image from '{gif_path_or_url}'. Error: {e}")
+        # Option 2: GIF from a URL (if you prefer this method)
+        # gif_url = "URL_TO_YOUR_BULB_GIF.gif" # << IMPORTANT: REPLACE THIS <<
+        # image_width = 150 # Adjust width as needed
+        # try:
+        #     st.markdown(
+        #         f'<img src="{gif_url}" alt="Bulb animation" width="{image_width}">',
+        #         unsafe_allow_html=True,
+        #     )
+        # except Exception as e:
+        #     st.error(f"Error embedding GIF from URL: {e}")
