@@ -537,7 +537,7 @@ with tab2:
     with image_col:
         # Option 1: Local GIF (using base64 encoding for robustness)
         local_gif_path = "bulb.gif"  # << IMPORTANT: REPLACE THIS if your filename is different <<
-        image_width = 150 # Adjust width as needed
+        image_width = 250 # Adjust width as needed
 
         if os.path.exists(local_gif_path):
             try:
@@ -553,13 +553,3 @@ with tab2:
         else:
             st.warning(f"Local GIF not found at '{local_gif_path}'. Please check the path and filename.")
 
-        # Option 2: GIF from a URL (if you prefer this method)
-        # gif_url = "URL_TO_YOUR_BULB_GIF.gif" # << IMPORTANT: REPLACE THIS <<
-        # image_width = 150 # Adjust width as needed
-        # try:
-        #     st.markdown(
-        #         f'<img src="{gif_url}" alt="Bulb animation" width="{image_width}">',
-        #         unsafe_allow_html=True,
-        #     )
-        # except Exception as e:
-        #     st.error(f"Error embedding GIF from URL: {e}")
