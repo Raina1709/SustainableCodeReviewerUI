@@ -460,73 +460,97 @@ with tab1:
 
 # --- Summary Tab ---
 with tab2:
-    st.header("Analysis Summary")
+    # Create main columns: one for the summary text, one for the GIF
+    # Adjust the ratio [3, 1] as needed. E.g., [2,1] for a relatively larger GIF area
+    # or [4,1] for a smaller GIF area.
+    summary_content_col, image_col = st.columns([3, 1])
 
-    # Retrieve values from session state
-    total_scripts_analyzed = st.session_state.get('total_scripts_analyzed', 0)
-    total_predicted_consumption_single_run = st.session_state.get('total_predicted_consumption', 0.0)
-    potential_total_savings_single_run = st.session_state.get('potential_total_savings', 0.0)
+    with summary_content_col:
+        st.header("Analysis Summary")
 
-    # Display the standard metrics
-    st.metric("Total Scripts Analyzed", total_scripts_analyzed)
-    st.metric("Total Predicted Energy Consumption (per single combined execution)", f"{total_predicted_consumption_single_run:.2f} joules")
-    st.metric("Estimated Total Potential Saving (per single combined execution)", f"{potential_total_savings_single_run:.2f} joules")
+        # Retrieve values from session state
+        total_scripts_analyzed = st.session_state.get('total_scripts_analyzed', 0)
+        total_predicted_consumption_single_run = st.session_state.get('total_predicted_consumption', 0.0)
+        potential_total_savings_single_run = st.session_state.get('potential_total_savings', 0.0)
 
-    # Calculate Improvement in Efficiency based on single run
-    improvement_percentage_single_run = 0.0
-    if total_predicted_consumption_single_run > 0:
-        improvement_percentage_single_run = (potential_total_savings_single_run / total_predicted_consumption_single_run) * 100
+        # Display the standard metrics
+        st.metric("Total Scripts Analyzed", total_scripts_analyzed)
+        st.metric("Total Predicted Energy Consumption (per single combined execution)", f"{total_predicted_consumption_single_run:.2f} joules")
+        st.metric("Estimated Total Potential Saving (per single combined execution)", f"{potential_total_savings_single_run:.2f} joules")
 
-    # --- Display "Improvement in Efficiency" with GREEN value ---
-    label_improvement = "Improvement in Efficiency (for single execution)"
-    value_improvement = f"{improvement_percentage_single_run:.1f}%"
-    # Attempting to more closely match st.metric value styling
-    st.markdown(f"""
-    <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
-        <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
-        <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_improvement}</div>
-    </div>
-    """, unsafe_allow_html=True) # Added subtle negative letter-spacing
+        # Calculate Improvement in Efficiency based on single run
+        improvement_percentage_single_run = 0.0
+        if total_predicted_consumption_single_run > 0:
+            improvement_percentage_single_run = (potential_total_savings_single_run / total_predicted_consumption_single_run) * 100
 
-    st.divider()
+        label_improvement = "Improvement in Efficiency (for single execution)"
+        value_improvement = f"{improvement_percentage_single_run:.1f}%"
+        st.markdown(f"""
+        <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
+            <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
+            <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_improvement}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.subheader("Projected Daily Impact (Based on 500 executions/day)")
+        st.divider()
 
-    if potential_total_savings_single_run > 0:
-        EXECUTIONS_PER_DAY = 500
-        estimated_daily_savings_joules = potential_total_savings_single_run * EXECUTIONS_PER_DAY
-        st.metric("Estimated Daily Savings (on 500 executions)", f"{estimated_daily_savings_joules:,.2f} joules")
+        st.subheader("Projected Daily Impact (Based on 500 executions/day)")
 
-        ENERGY_PER_12W_CFL_HOUR_JOULES = 43200.0
+        if potential_total_savings_single_run > 0:
+            EXECUTIONS_PER_DAY = 500
+            estimated_daily_savings_joules = potential_total_savings_single_run * EXECUTIONS_PER_DAY
+            st.metric("Estimated Daily Savings (on 500 executions)", f"{estimated_daily_savings_joules:,.2f} joules")
 
-        if ENERGY_PER_12W_CFL_HOUR_JOULES > 0:
-            total_bulb_hours_equivalent = estimated_daily_savings_joules / ENERGY_PER_12W_CFL_HOUR_JOULES
+            ENERGY_PER_12W_CFL_HOUR_JOULES = 43200.0
 
-            st.markdown("##### Energy Equivalence:")
-            st.write(
-                f"This estimated daily saving of **{estimated_daily_savings_joules:,.2f} joules** is equivalent to:"
-            )
+            if ENERGY_PER_12W_CFL_HOUR_JOULES > 0:
+                total_bulb_hours_equivalent = estimated_daily_savings_joules / ENERGY_PER_12W_CFL_HOUR_JOULES
 
-            num_bulbs_for_one_hour = total_bulb_hours_equivalent
+                st.markdown("##### Energy Equivalence:")
+                st.write(
+                    f"This estimated daily saving of **{estimated_daily_savings_joules:,.2f} joules** is equivalent to:"
+                )
 
-            # --- Display "Powering 12W CFL Bulbs" with GREEN value ---
-            label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
-            value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
-            st.markdown(f"""
-            <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
-                <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
-                <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_bulbs}</div>
-            </div>
-            """, unsafe_allow_html=True) # Added subtle negative letter-spacing
+                num_bulbs_for_one_hour = total_bulb_hours_equivalent
 
+                label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
+                value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
+                st.markdown(f"""
+                <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
+                    <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
+                    <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_bulbs}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            if total_bulb_hours_equivalent >= 24:
-                num_days_for_one_bulb = total_bulb_hours_equivalent / 24
-                st.write(f"That's enough to power one 12W CFL bulb continuously for approximately **{num_days_for_one_bulb:.1f} days**.")
-            elif total_bulb_hours_equivalent < 1 and total_bulb_hours_equivalent > 0:
-                num_minutes_for_one_bulb = total_bulb_hours_equivalent * 60
-                st.write(f"Or, powering one 12W CFL bulb for approximately **{num_minutes_for_one_bulb:.0f} minutes**.")
+                if total_bulb_hours_equivalent >= 24:
+                    num_days_for_one_bulb = total_bulb_hours_equivalent / 24
+                    st.write(f"That's enough to power one 12W CFL bulb continuously for approximately **{num_days_for_one_bulb:.1f} days**.")
+                elif total_bulb_hours_equivalent < 1 and total_bulb_hours_equivalent > 0:
+                    num_minutes_for_one_bulb = total_bulb_hours_equivalent * 60
+                    st.write(f"Or, powering one 12W CFL bulb for approximately **{num_minutes_for_one_bulb:.0f} minutes**.")
+            else:
+                st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
         else:
-            st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
-    else:
-        st.info("No potential savings identified, so no daily impact or energy equivalence to show.")
+            st.info("No potential savings identified, so no daily impact or energy equivalence to show.")
+
+    # --- Column for the GIF ---
+    with image_col:
+        # Add some vertical space if you want to align the GIF differently,
+        # e.g., st.markdown("<br>" * 5, unsafe_allow_html=True) for 5 line breaks
+        # Or align it with a particular section by careful placement.
+        # For now, it will align near the top of the tab content.
+
+        gif_path_or_url = "bulb.gif"  # << IMPORTANT: REPLACE THIS <<
+        # Option 1: Local GIF (place 'bulb.gif' in the same directory as your script)
+        # gif_path_or_url = "bulb.gif"
+
+        # Option 2: GIF from a URL
+        # gif_path_or_url = "https://media.giphy.com/media/YOUR_GIF_ID/giphy.gif" # Example URL
+
+        try:
+            # Adjust width as needed to fit your layout and GIF aspect ratio
+            st.image(gif_path_or_url, caption="Bright Ideas for Energy Saving!", width=150)
+        except FileNotFoundError: # Specific error for local files
+             st.warning(f"GIF image not found at '{gif_path_or_url}'. Please check the path.")
+        except Exception as e: # Catch other errors (e.g., network issues for URLs, invalid image format)
+            st.error(f"Could not load image from '{gif_path_or_url}'. Error: {e}")
