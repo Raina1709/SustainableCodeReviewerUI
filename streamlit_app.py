@@ -459,12 +459,53 @@ with tab1:
             except Exception as e:
                 st.warning(f"Could not automatically clean up temp directory. Error: {e}")
 
+# --- Summary Tab ---
 with tab2:
-    # Create main columns: one for the summary text, one for the GIF
-    summary_content_col, image_col = st.columns([3, 1])
+    # Create main columns: one for the GIF (left), one for the summary text (right)
+    # Adjust the ratio [1, 3] as needed. E.g., [1,2] or even [1,4] if you want the GIF column to be narrower.
+    image_col, summary_content_col = st.columns([1, 3]) # GIF on LEFT, Text on RIGHT
 
+    # --- Column for the GIF (Now on the LEFT) ---
+    with image_col:
+        # Add some vertical space if you want to align the GIF differently,
+        # e.g., st.markdown("<br>" * 5, unsafe_allow_html=True) for 5 line breaks
+        # For now, it will align near the top of the tab content.
+
+        # Option 1: Local GIF (using base64 encoding for robustness)
+        local_gif_path = "bulb.gif"  # << IMPORTANT: REPLACE THIS if your filename is different <<
+        image_width = 150 # Adjust width as needed, make sure it fits well in the new column width
+
+        if os.path.exists(local_gif_path):
+            try:
+                with open(local_gif_path, "rb") as f:
+                    contents = f.read()
+                data_url = base64.b64encode(contents).decode("utf-8")
+                st.markdown(
+                    f'<div style="display: flex; justify-content: center; align-items: flex-start; height: 100%; padding-top: 20px;">' # Added for centering and some padding
+                    f'<img src="data:image/gif;base64,{data_url}" alt="Bulb animation" style="max-width: 100%; width: {image_width}px;">' # max-width for responsiveness
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            except Exception as e:
+                st.error(f"Error embedding local GIF: {e}")
+        else:
+            st.warning(f"Local GIF not found at '{local_gif_path}'. Please check the path and filename.")
+
+        # Option 2: GIF from a URL (if you prefer this method)
+        # gif_url = "URL_TO_YOUR_BULB_GIF.gif" # << IMPORTANT: REPLACE THIS <<
+        # image_width = 150 # Adjust width as needed
+        # try:
+        #     st.markdown(
+        #         f'<div style="display: flex; justify-content: center; align-items: flex-start; height: 100%; padding-top: 20px;">'
+        #         f'<img src="{gif_url}" alt="Bulb animation" style="max-width: 100%; width: {image_width}px;">'
+        #         f'</div>',
+        #         unsafe_allow_html=True,
+        #     )
+        # except Exception as e:
+        #     st.error(f"Error embedding GIF from URL: {e}")
+
+    # --- Column for the Summary Text (Now on the RIGHT) ---
     with summary_content_col:
-        # ... (all your existing summary content code) ...
         st.header("Analysis Summary")
 
         # Retrieve values from session state
@@ -486,14 +527,14 @@ with tab2:
         value_improvement = f"{improvement_percentage_single_run:.1f}%"
         st.markdown(f"""
         <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
-            <div style="font-size: 1.000rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
-            <div style="font-size: 2.500rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_improvement}</div>
+            <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_improvement}</div>
+            <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_improvement}</div>
         </div>
         """, unsafe_allow_html=True)
 
         st.divider()
 
-        st.subheader("Projected Daily Impact")
+        st.subheader("Projected Daily Impact (Based on 500 executions/day)")
 
         if potential_total_savings_single_run > 0:
             EXECUTIONS_PER_DAY = 500
@@ -516,8 +557,8 @@ with tab2:
                 value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
                 st.markdown(f"""
                 <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
-                    <div style="font-size: 1.000rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
-                    <div style="font-size: 2.500rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_bulbs}</div>
+                    <div style="font-size: 0.875rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
+                    <div style="font-size: 1.875rem; font-weight: 600; color: green; line-height: 2.25rem; font-family: inherit; letter-spacing: -0.005em;">{value_bulbs}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -531,25 +572,3 @@ with tab2:
                 st.warning("Energy per bulb-hour is not configured correctly for equivalence calculation.")
         else:
             st.info("No potential savings identified, so no daily impact or energy equivalence to show.")
-
-
-    # --- Column for the GIF ---
-    with image_col:
-        # Option 1: Local GIF (using base64 encoding for robustness)
-        local_gif_path = "bulb.gif"  # << IMPORTANT: REPLACE THIS if your filename is different <<
-        image_width = 250 # Adjust width as needed
-
-        if os.path.exists(local_gif_path):
-            try:
-                with open(local_gif_path, "rb") as f:
-                    contents = f.read()
-                data_url = base64.b64encode(contents).decode("utf-8")
-                st.markdown(
-                    f'<img src="data:image/gif;base64,{data_url}" alt="Bulb animation" width="{image_width}">',
-                    unsafe_allow_html=True,
-                )
-            except Exception as e:
-                st.error(f"Error embedding local GIF: {e}")
-        else:
-            st.warning(f"Local GIF not found at '{local_gif_path}'. Please check the path and filename.")
-
