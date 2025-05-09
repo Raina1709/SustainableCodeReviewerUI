@@ -514,7 +514,7 @@ with tab2:
             col1, col2 = st.columns(2)
             with col1:
                 st.metric(
-                    label="Powering 12W CFL Bulbs (for 1 hour each)",
+                    label="Powering 12W CFL Bulbs (for 1 hour each)"
                     value=f"{num_bulbs_for_one_hour:.1f} bulbs"
                     st.markdown(f"""
                 <div style="margin-bottom: 0.5rem;">
