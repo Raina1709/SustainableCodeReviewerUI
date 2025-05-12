@@ -513,7 +513,7 @@ with tab2:
                 num_bulbs_for_one_hour = total_bulb_hours_equivalent
 
                 label_bulbs = "Powering 12W CFL Bulbs (for 1 hour each)"
-                value_bulbs = f"{num_bulbs_for_one_hour:.1f} bulbs"
+                value_bulbs = f"{num_bulbs_for_one_hour:.0f} bulbs"
                 st.markdown(f"""
                 <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
                     <div style="font-size: 1.000rem; color: rgb(85, 87, 97); line-height: 1.25rem; font-family: inherit;">{label_bulbs}</div>
